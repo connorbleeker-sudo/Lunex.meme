@@ -139,7 +139,7 @@
     </div>
   </div>
 
-  <div class="ov-truth"><div><p>Most new memecoins go to zero. The ones that don't usually show it early: who is buying, how fast, and whether the dev still holds. Lunex doesn't predict which coin that will be. It puts those three things in front of you while they happen.</p><small>Scores describe current trading activity. They are not price forecasts or financial advice.</small></div></div>
+  <div class="ov-truth"><div><p>Most new memecoins go to <em class="hl">zero.</em> The ones that don't usually show it <em class="hl">early</em>: <em class="hl">who is buying</em>, <em class="hl">how fast</em>, and whether the <em class="hl">dev still holds</em>. Lunex doesn't predict which coin that will be. It puts those three things in front of you <em class="hl">while they happen.</em></p><small>Scores describe current trading activity. They are not price forecasts or financial advice.</small></div></div>
 
   <div class="nv-foot"><b>Lunex</b><span>Data from DexScreener, PumpPortal and the Solana RPC · Not financial advice</span><span class="nv-legal"><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/privacy" target="_blank" rel="noopener">Privacy</a><a href="/refunds" target="_blank" rel="noopener">Refunds</a><a href="/cookies" target="_blank" rel="noopener">Cookies</a><span>© {{YEAR}} {{LEGAL_NAME}} · <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></span></span></div>
 </section>
@@ -861,7 +861,7 @@ async function loadMeta(c) {
   if (!c.uri) return;
   try {
     const ctl = new AbortController(); setTimeout(() => ctl.abort(), 6000);
-    const r = await fetch(c.uri, { signal: ctl.signal });
+    const r = await fetch(window.LunexUI ? (LunexUI.fastIpfs(c.uri) || c.uri) : c.uri, { signal: ctl.signal });   // ipfs.io rate-limits; pump.fun's gateway is fast
     c.meta = await r.json();
     dirty = true;
   } catch { c.meta = { failed: true }; }
@@ -1028,7 +1028,8 @@ function renderPump() {
   $('#pumpStats').innerHTML = `${launches} launches seen · tracking ${coins.size} · ${tradeStream ? '<b class="up"><i class="ic ic-zap"></i> real-time trades</b>' : '<b style="color:var(--amber)">basic mode: trades refresh every 15s, no dev-sell detection</b> (add a PumpPortal key in Smart Wallets for real-time)'}`;
   if (!list.length) { $('#pumpGrid').innerHTML = '<div class="empty">Waiting for the next launch…</div>'; return; }
   $('#pumpGrid').innerHTML = list.map(({ c, s }) => {
-    const img = c.meta?.image ? esc(c.meta.image) : '';
+    // pump.fun's image CDN works from the mint alone, so the picture shows the moment the coin appears
+    const img = esc(window.LunexUI ? (LunexUI.coinImgUrl(c.mint) || LunexUI.fastIpfs(c.meta?.image)) : (c.meta?.image || ''));
     const usd = v => solUsd ? fmt(v * solUsd) : v.toFixed(1) + ' SOL';
     const socials = c.meta ? ['twitter', 'telegram', 'website'].filter(k => c.meta[k] && /^https?:\/\//.test(c.meta[k]))
       .map(k => `<a href="${esc(c.meta[k])}" target="_blank" rel="noopener">${k === 'twitter' ? 'X' : k === 'telegram' ? '<i class="ic ic-send"></i> TG' : '<i class="ic ic-globe"></i> Site'}</a>`).join('') : '';
@@ -1421,7 +1422,7 @@ setTimeout(pollWallets, 1500);
 </script>
 <script type="module" src="brain.js"></script>
 <script src="nova.js"></script><script src="luna.js"></script><script src="trade.js"></script>
-<script src="home.js"></script><script src="practice.js"></script><script src="calls.js"></script>
+<script src="home.js"></script><script src="practice.js"></script><script src="calls.js"></script><script src="learn.js"></script>
 <!-- ground.css sits after every script so it also wins over the styles nova/luna/trade inject into <head> -->
 <link rel="stylesheet" href="ground.css">
 </body>

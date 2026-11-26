@@ -222,18 +222,22 @@ function resizeFX() { const d = Math.min(devicePixelRatio || 1, 2); fxc.width = 
 resizeFX(); addEventListener('resize', resizeFX);
 const css = v => getComputedStyle(document.body).getPropertyValue(v).trim() || '#ff6a2b';
 function burst(x, y, color = css('--acc'), n = 60, speed = 7) {
-  if (calm) return;
+  if (calm || document.hidden || parts.length > 900 || rings.length > 12) return;
   for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = Math.random() * speed + 1;
     parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, decay: .012 + Math.random() * .02, size: Math.random() * 2.4 + .6, color }); }
   rings.push({ x, y, r: 4, life: 1, color });
 }
+// Effects are skipped while the tab is hidden: the animation loop is paused then, so anything queued would
+// pile up and all fire at once when you come back. Counts are capped too, so a burst of launches can't flood it.
+const fxOff = () => calm || document.hidden;
+document.addEventListener('visibilitychange', () => { if (document.hidden) { comets.length = 0; parts.length = 0; rings.length = 0; } });
 function comet(label, color = css('--acc')) {
-  if (calm) return;
+  if (fxOff() || comets.length >= 4) return;
   const y = 120 + Math.random() * innerHeight * .45;
   comets.push({ x: innerWidth + 40, y, vx: -(7 + Math.random() * 5), vy: (Math.random() - .3) * 1.4, label, color, life: 1, trail: [] });
 }
 function screenFx(kind) {
-  if (calm) return;
+  if (calm || document.hidden) return;
   const c = 'nv-' + kind; document.body.classList.remove(c); void document.body.offsetWidth; document.body.classList.add(c);
   setTimeout(() => document.body.classList.remove(c), 600);
 }
@@ -582,7 +586,9 @@ function wrap(name, after) {
   window[name] = function (...args) { const r = orig.apply(this, args); try { after(...args); } catch (e) { } return r; };
 }
 wrap('onCreate', m => {
-  bay.total++; bay.rockets.push(mkRocket('$' + (m.symbol || '???')));
+  bay.total++;
+  if (document.hidden) return;   // nothing queues up while you're on another tab
+  if (bay.rockets.filter(r => !r.mini).length < 8) bay.rockets.push(mkRocket('$' + (m.symbol || '???')));
   if (page === 'pump') { comet('$' + m.symbol, css('--acc')); pulse(innerWidth * .85, 160, .35); window.SFX && SFX.launch(); }
   else if (page === 'overview' && Math.random() < .5) comet('$' + m.symbol, '#ff9e5e');
 });
@@ -818,7 +824,10 @@ if (typeof window.dexCard === 'function') {
   const origDex = window.dexCard;
   window.dexCard = function (p, a, extra = '') {
     const html = origDex(p, a, extra);
-    try { return html.replace(/<div class="bars">/, dexSpark(p) + '<div class="bars">').replace(/<div class="flags">/, readHtml(readDex(p, a)) + '<div class="flags">'); } catch { return html; }
+    try {
+      const sp = dexSpark(p);   // the price graph goes under the score dials (or above the old bars)
+      const withSpark = /<div class="lx-dials">/.test(html) ? html.replace(/<div class="lx-dials">[\s\S]*?<\/div>/, m => m + sp) : html.replace(/<div class="bars">/, () => sp + '<div class="bars">');
+      return withSpark.replace(/<div class="flags">/, readHtml(readDex(p, a)) + '<div class="flags">'); } catch { return html; }
   };
 }
 // pump cards: attach reads after each render, and flash brand-new launches
@@ -836,7 +845,7 @@ wrap('renderPump', () => {
     const mint = link.href.split('/coin/')[1], c = all.get(mint); if (!c) return;
     if (!card.querySelector('.nv-spark') && c.hist && c.hist.length > 1) card.querySelector('.bars')?.insertAdjacentHTML('beforebegin', spark([...c.hist.map(x => x.m), c.mcap], ['launch', 'now']));
     if (!card.querySelector('.nv-read')) card.querySelector('.flags')?.insertAdjacentHTML('beforebegin', readHtml(readPump(c, window.pumpScore(c))));
-    if (!seenMints.has(mint)) { seenMints.add(mint); card.classList.add('nv-new'); }
+    if (!seenMints.has(mint)) { seenMints.add(mint); if (!document.hidden && now - c.created < 8000) card.classList.add('nv-new'); }   // only flash truly fresh ones
   });
 });
 
@@ -887,6 +896,40 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 setInterval(updateOverview, 1500); updateOverview(); updateTicker();
+
+// ================================================================ NAV HINTS
+// The tab names are short, so each one gets a plain-English line under the name (wide screens)
+// and a hover/focus card that says what the page is for.
+const NAV_HINTS = {
+  overview: ['Overview', 'Live totals, the newest launches and a free coin check.'],
+  luna:     ['AI analyst', 'Ask Luna about any coin and get a plain-English read. Pro.'],
+  scanner:  ['Trending coins', 'Trending Solana coins, scored for momentum and safety.'],
+  pump:     ['New coins', 'Every new pump.fun coin, about a second after it mints.'],
+  xfeed:    ['X posts', 'Posts from big crypto accounts on X, ranked by reach and speed.'],
+  smart:    ['Smart money', 'Wallets you follow and the coins they buy and sell.'],
+  mine:     ['My bags', 'Your own holdings, profit and loss, and price alerts.'],
+  calls:    ['Community', 'Coins other Lunex traders like or avoid, and how those calls did.'],
+};
+const navTip = document.createElement('div'); navTip.className = 'nv-navtip'; navTip.setAttribute('role', 'tooltip'); navTip.id = 'nv-navtip';
+document.body.appendChild(navTip);
+let tipFor = null;
+const hideTip = () => { navTip.classList.remove('on'); tipFor = null; };
+qa('nav button[data-p]').forEach(b => {
+  const h = NAV_HINTS[b.dataset.p]; if (!h) return;
+  if (!b.querySelector('.nv-hint')) b.insertAdjacentHTML('beforeend', `<small class="nv-hint">${h[0]}</small>`);
+  b.setAttribute('aria-describedby', 'nv-navtip');
+  const show = () => {
+    tipFor = b; const name = (PAGES[b.dataset.p] && PAGES[b.dataset.p].title) || b.firstChild.textContent.trim();
+    navTip.innerHTML = `<b>${name}</b><span>${h[1]}</span>`;
+    const r = b.getBoundingClientRect(), w = 250;
+    navTip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    navTip.style.top = (r.bottom + 10) + 'px';
+    navTip.classList.add('on');
+  };
+  b.addEventListener('mouseenter', show); b.addEventListener('focus', show);
+  b.addEventListener('mouseleave', hideTip); b.addEventListener('blur', hideTip); b.addEventListener('click', hideTip);
+});
+addEventListener('scroll', () => tipFor && hideTip(), { passive: true });
 
 window.NOVA = { burst, comet, pulse, screenFx, goPage };
 })();

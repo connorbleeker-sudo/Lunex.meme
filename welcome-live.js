@@ -31,7 +31,7 @@ function addLaunch(x, animate) {
   if (!list) return;
   list.querySelector('.feed-empty')?.remove();
   const li = document.createElement('li'); if (animate) li.className = 'in';
-  li.innerHTML = `<span class="f-sym">$${esc(x.symbol || '???')}</span><span class="f-name">${esc(x.name)}</span>
+  li.innerHTML = `${UI.coinImg(x.mint)}<span class="f-sym">$${esc(x.symbol || '???')}</span><span class="f-name">${esc(x.name)}</span>
     <span class="f-mc">${x.mcapSol ? x.mcapSol.toFixed(1) + ' SOL mcap' : ''}</span><span class="f-dev">${x.devBuySol ? 'dev bought ' + x.devBuySol.toFixed(2) + ' SOL' : 'no dev buy'}</span>
     <time data-t="${x.t}">${UI.ago(x.t)} ago</time>
     <button type="button" class="f-check" data-mint="${esc(x.mint)}">Check</button>`;

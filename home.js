@@ -75,7 +75,7 @@ async function feed() {
     if (!lastT) ol.innerHTML = '';
     launches.slice(-8).forEach(x => {
       const li = document.createElement('li'); if (lastT) li.className = 'in';
-      li.innerHTML = `<button type="button" data-mint="${esc(x.mint)}"><b>$${esc(x.symbol || '???')}</b><span>${esc(x.name)}</span><time data-t="${x.t}">${UI.ago(x.t)}</time></button>`;
+      li.innerHTML = `<button type="button" data-mint="${esc(x.mint)}">${UI.coinImg(x.mint)}<b>$${esc(x.symbol || '???')}</b><span>${esc(x.name)}</span><time data-t="${x.t}">${UI.ago(x.t)}</time></button>`;
       ol.prepend(li);
     });
     while (ol.children.length > 8) ol.lastElementChild.remove();

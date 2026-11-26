@@ -13,12 +13,15 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ---------------------------------------------------------------- styles (injected once)
 const css = `
 .lx-dial{--c:#3dffb0;position:relative;display:inline-grid;place-items:center;width:var(--sz,74px);height:var(--sz,74px);flex:none}
-.lx-dial svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(135deg)}
+.lx-dial svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(135deg);overflow:visible}
+.lx-dial svg circle{filter:none!important}
+.lx-dial::before{content:"";position:absolute;inset:14%;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--c) 22%,transparent),transparent 70%);pointer-events:none}
 .lx-dial .tr{fill:none;stroke:rgba(255,255,255,.09);stroke-width:7;stroke-linecap:round;stroke-dasharray:75 100}
-.lx-dial .val{fill:none;stroke:var(--c);stroke-width:7;stroke-linecap:round;stroke-dasharray:var(--v) 100;filter:drop-shadow(0 0 5px var(--c));animation:lx-dial .9s cubic-bezier(.2,.8,.2,1) both}
+.lx-dial .val{fill:none;stroke:var(--c);stroke-width:7;stroke-linecap:round;stroke-dasharray:var(--v) 100;animation:lx-dial .9s cubic-bezier(.2,.8,.2,1) both}
 .lx-dial b{position:relative;font:800 calc(var(--sz,74px)*.3)/1 'Bricolage Grotesque',system-ui,sans-serif;letter-spacing:-.03em;color:#f0eef3;margin-top:-4px}
 .lx-dial small{position:absolute;bottom:calc(var(--sz,74px)*.04);font:600 calc(var(--sz,74px)*.115)/1 'IBM Plex Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#aaa8b6}
 @keyframes lx-dial{from{stroke-dasharray:0 100}}
+.lx-coin{width:28px;height:28px;border-radius:8px;object-fit:cover;flex:none;background:rgba(255,255,255,.06);vertical-align:middle}
 .lx-luna{position:relative;width:var(--lsz,160px);height:var(--lsz,160px);flex:none}
 .lx-luna .luna{width:100%;height:100%;overflow:visible;display:block}
 .lx-luna .l-ring-back{stroke:#ff7fd1;opacity:.35}.lx-luna .l-ring-front{stroke:#ff7fd1;opacity:.85;filter:drop-shadow(0 0 4px #ff7fd1)}
@@ -123,5 +126,18 @@ function scan(host, steps, stepMs = 260) {
   });
 }
 
-window.LunexUI = { dial, dialColor, luna, scan, money, ago, esc };
+// ---------------------------------------------------------------- coin thumbnail
+// pump.fun's own image CDN serves a small thumbnail from the mint address alone, the moment a coin launches,
+// so we don't wait on the IPFS metadata (ipfs.io rate-limits and often answers 429). `fallback` is tried if it fails.
+const isMint = m => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(m || ''));
+function coinImgUrl(mint) { return isMint(mint) ? `https://images.pump.fun/coin-image/${mint}?variant=86x86` : ''; }
+function fastIpfs(u) { u = String(u || ''); if (!/^https:\/\//.test(u)) return ''; return u.replace(/^https:\/\/(ipfs\.io|cf-ipfs\.com|gateway\.pinata\.cloud|dweb\.link)\/ipfs\//, 'https://pump.mypinata.cloud/ipfs/'); }
+function coinImg(mint, fallback = '', cls = 'lx-coin') {
+  const src = coinImgUrl(mint) || fastIpfs(fallback);
+  const fb = fastIpfs(fallback);
+  const onerr = fb && fb !== src ? `if(this.dataset.fb!=='1'){this.dataset.fb='1';this.src=${esc(JSON.stringify(fb))}}else{this.style.visibility='hidden'}` : `this.style.visibility='hidden'`;
+  return `<img class="${cls}" src="${esc(src)}" alt="" width="28" height="28" decoding="async" onerror="${onerr}">`;
+}
+
+window.LunexUI = { dial, dialColor, luna, scan, money, ago, esc, coinImg, coinImgUrl, fastIpfs };
 })();

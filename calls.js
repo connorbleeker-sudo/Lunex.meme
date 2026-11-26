@@ -44,7 +44,7 @@ root.innerHTML = `
       <div class="cl-stream" id="clStream" aria-live="polite"><p class="cl-muted">Loading calls…</p></div>
       <form class="cl-compose" id="clForm" autocomplete="off">
         <div class="cl-attach" id="clAttach" hidden></div>
-        <div class="cl-calls" role="radiogroup" aria-label="Your call">${CALLS.map(([c, d]) => `<button type="button" role="radio" aria-checked="false" data-c="${c}" title="${d}" class="c-${c.toLowerCase()}">${c}</button>`).join('')}</div>
+        <div class="cl-calls" role="radiogroup" aria-label="Your call"><span class="cl-calls-lbl" aria-hidden="true">Your call</span>${CALLS.map(([c, d]) => `<button type="button" role="radio" aria-checked="false" data-c="${c}" title="${d}" class="c-${c.toLowerCase()}">${c}<span>${d}</span></button>`).join('')}</div>
         <div class="cl-row">
           <input id="clCoin" spellcheck="false" placeholder="Coin address (optional)" aria-label="Coin contract address" maxlength="44">
           <input id="clText" placeholder="Why? Keep it short and useful…" aria-label="Message" maxlength="280">
@@ -67,7 +67,7 @@ let lastId = 0, call = '', unseen = 0, msgs = [];
 const stream = q('#clStream');
 function msgHtml(m) {
   const coin = m.mint ? `<div class="cl-coin">
-      ${px[m.mint]?.img ? `<img src="${esc(px[m.mint].img)}" alt="" onerror="this.remove()">` : ''}
+      ${UI.coinImg ? UI.coinImg(m.mint, px[m.mint]?.img) : px[m.mint]?.img ? `<img src="${esc(px[m.mint].img)}" alt="" onerror="this.remove()">` : ''}
       ${m.call ? `<span class="cl-call c-${esc(m.call.toLowerCase())}">${esc(m.call)}</span>` : ''}<b>$${esc(m.sym || '?')}</b>
       <small>${m.fdv ? UI.money(m.fdv) + ' mcap at call' : ''}</small><em data-mint="${esc(m.mint)}" data-p="${m.price || 0}"></em>
       <span class="cl-coin-acts"><button type="button" data-look="${esc(m.mint)}">Card</button><button type="button" data-pbuy="${esc(m.mint)}">Practice</button></span></div>` : '';
