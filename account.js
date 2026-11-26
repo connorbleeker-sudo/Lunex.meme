@@ -21,7 +21,7 @@ const short = w => w ? w.slice(0, 4) + '…' + w.slice(-4) : 'Not set';
 window.LunexAccount = {
   user: U,
   isPro: () => U.plan === 'pro',
-  upgrade() { window.LunexCheckout ? window.LunexCheckout.open() : alert('Checkout is still loading. Try again in a second.'); },
+  upgrade() { location.href = '/pay'; },
   async billing() {
     const r = await fetch('/api/stripe/portal', { method: 'POST' }); const j = await r.json().catch(() => ({}));
     if (j.url) location.href = j.url; else alert(j.error || 'Billing page unavailable right now.');

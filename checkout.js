@@ -85,7 +85,23 @@ async function pay(method) {
       import('https://esm.sh/buffer@6.0.3'),
     ]);
     const from = new W.PublicKey(payer.toString()), to = new W.PublicKey(inv.wallet);
+    const conn = new W.Connection(location.origin + '/rpc', 'confirmed');
+    if (from.equals(to)) throw new Error('This is the Lunex wallet itself. Switch to a different Phantom account to pay.');
+    // check the balance first: a payment that would fail makes Phantom flag the site as malicious
+    status('Checking your balance…');
+    const solBal = await conn.getBalance(from);
+    if (method === 'usdc') {
+      const accs = await conn.getParsedTokenAccountsByOwner(from, { mint: new W.PublicKey(inv.usdcMint) });
+      const usdc = accs.value.reduce((s, a) => s + Number(a.account.data.parsed.info.tokenAmount.uiAmount || 0), 0);
+      if (usdc < inv.amount) throw new Error(`This wallet has ${usdc.toFixed(2)} USDC. You need $${inv.amount} USDC, plus about 0.003 SOL for network fees.`);
+      if (solBal < 3e6) throw new Error('You need a little SOL (about 0.003) in this wallet to cover the network fee.');
+    } else if (solBal < inv.amountRaw + 5e5) {
+      throw new Error(`This wallet has ${(solBal / 1e9).toFixed(4)} SOL. You need ${inv.amount.toFixed(4)} SOL plus a tiny network fee.`);
+    }
     const tx = new W.Transaction();
+    // explicit compute limit and fee, as Phantom's transaction guidelines ask
+    tx.add(W.ComputeBudgetProgram.setComputeUnitLimit({ units: 120000 }));
+    tx.add(W.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 20000 }));
     if (method === 'usdc') {
       const mint = new W.PublicKey(inv.usdcMint);
       const fromAta = T.getAssociatedTokenAddressSync(mint, from), toAta = T.getAssociatedTokenAddressSync(mint, to);
@@ -95,10 +111,20 @@ async function pay(method) {
       tx.add(W.SystemProgram.transfer({ fromPubkey: from, toPubkey: to, lamports: inv.amountRaw }));
     }
     tx.add(new W.TransactionInstruction({ programId: new W.PublicKey(MEMO_PROGRAM), keys: [], data: B.Buffer.from(inv.memo, 'utf8') }));
-    const conn = new W.Connection(location.origin + '/rpc', 'confirmed');
     tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash; tx.feePayer = from;
+    // dry-run it before Phantom sees it, so a payment that can't go through never reaches the wallet
+    const sim = await conn.simulateTransaction(tx);
+    if (sim.value.err) {
+      console.warn('Lunex payment simulation failed', sim.value.err, sim.value.logs);
+      const logs = (sim.value.logs || []).join(' ');
+      throw new Error(/insufficient/i.test(logs) || JSON.stringify(sim.value.err).includes('InsufficientFunds')
+        ? `Not enough ${method.toUpperCase()} in that wallet (plus a tiny network fee).`
+        : 'That payment would fail on the network, so it was not sent. Try again in a minute.');
+    }
     status(`Approve <b>${inv.currency === 'usdc' ? '$' + inv.amount + ' USDC' : inv.amount.toFixed(4) + ' SOL'}</b> in Phantom…`);
-    const { signature } = await prov.signAndSendTransaction(tx);
+    // Phantom signs, Lunex sends it through its own node (Phantom's recommended flow)
+    const signed = await prov.signTransaction(tx);
+    const signature = await conn.sendRawTransaction(signed.serialize(), { preflightCommitment: 'confirmed' });
     status('Payment sent. Confirming on the blockchain…');
     for (let i = 0; i < 45; i++) {
       const r = await api('/api/pay/confirm', { ref: inv.ref, signature });

@@ -99,6 +99,35 @@ def sol_price():
     return _sol["px"]
 
 
+_B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def _b58(b):
+    n, out = int.from_bytes(b, "big"), ""
+    while n:
+        n, r = divmod(n, 58)
+        out = _B58[r] + out
+    return "1" * (len(b) - len(b.lstrip(b"\0"))) + out
+
+
+def reference_for(ref):
+    """Solana Pay reference key for an invoice: a public key that only this payment's transaction will mention,
+    so the server can find the payment on-chain without the customer having to tell us the signature."""
+    return _b58(hashlib.sha256(b"lunex-pay-ref:" + ref.encode()).digest())
+
+
+def _amount_str(raw, decimals):
+    return (f"{raw / 10 ** decimals:.{decimals}f}").rstrip("0").rstrip(".")
+
+
+def solana_pay_url(ref, currency, raw, days):
+    q = {"amount": _amount_str(raw, 6 if currency == "usdc" else 9)}
+    if currency == "usdc":
+        q["spl-token"] = USDC_MINT
+    q.update({"reference": reference_for(ref), "label": "Lunex", "message": f"Lunex Pro: {days} days", "memo": "lunex:" + ref})
+    return f"solana:{pay_wallet()}?" + urllib.parse.urlencode(q, quote_via=urllib.parse.quote)
+
+
 def create_invoice(con, user_id, plan_id, currency):
     p = plans().get(plan_id)
     if not p:
@@ -119,7 +148,9 @@ def create_invoice(con, user_id, plan_id, currency):
                 (ref, user_id, plan_id, currency, raw, p["usd"], p["days"], time.time(), "open"))
     return {"ref": ref, "memo": "lunex:" + ref, "currency": currency, "amountRaw": raw,
             "amount": raw / (1_000_000 if currency == "usdc" else 1_000_000_000),
-            "usd": p["usd"], "days": p["days"], "wallet": pay_wallet(), "usdcMint": USDC_MINT}
+            "usd": p["usd"], "days": p["days"], "wallet": pay_wallet(), "usdcMint": USDC_MINT,
+            "reference": reference_for(ref), "payUrl": solana_pay_url(ref, currency, raw, p["days"]),
+            "expires": time.time() + INVOICE_TTL}
 
 
 def _memos(tx):
@@ -148,7 +179,9 @@ def verify_payment(con, user_id, ref, signature, rpc):
     meta = tx.get("meta") or {}
     if meta.get("err"):
         return "error", "That transaction failed on-chain, so nothing was paid."
-    if not any(m.strip().endswith("lunex:" + ref) or m.strip() == "lunex:" + ref for m in _memos(tx)):
+    keys = [k.get("pubkey") if isinstance(k, dict) else k for k in tx["transaction"]["message"]["accountKeys"]]
+    # a payment belongs to this invoice if it carries our memo (wallet button) or our reference key (QR / Solana Pay)
+    if reference_for(ref) not in keys and not any(m.strip().endswith("lunex:" + ref) for m in _memos(tx)):
         return "error", "That transaction isn't for this payment request."
     if inv["created"] + INVOICE_TTL + 15 * 60 < (tx.get("blockTime") or time.time()):
         return "error", "That payment request had expired. Start a new one."
@@ -159,7 +192,6 @@ def verify_payment(con, user_id, ref, signature, rpc):
         received = bal(meta.get("postTokenBalances")) - bal(meta.get("preTokenBalances"))
         ok = received >= inv["amount_raw"]
     else:
-        keys = [k.get("pubkey") if isinstance(k, dict) else k for k in tx["transaction"]["message"]["accountKeys"]]
         if wallet not in keys:
             return "error", "That transaction didn't pay the Lunex wallet."
         i = keys.index(wallet)

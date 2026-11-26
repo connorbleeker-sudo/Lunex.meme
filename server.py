@@ -44,7 +44,8 @@ DB_PATH = os.environ.get("LUNEX_DB") or os.path.join(HERE, "lunex.db")
 CONFIG_PATH = os.path.join(HERE, "lunex.config.json")
 RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 ALLOWED = {"getTokenAccountsByOwner", "getBalance", "getSignaturesForAddress", "getTransaction",
-           "getSignatureStatuses", "sendTransaction", "getLatestBlockhash"}  # sendTransaction only relays a tx the user's wallet already signed
+           "getSignatureStatuses", "sendTransaction", "getLatestBlockhash",
+           "simulateTransaction"}  # sendTransaction only relays a tx the user's wallet already signed; simulate is a read-only dry run
 X_SEARCH = "https://api.twitterapi.io/twitter/tweet/advanced_search"
 X_V2_SEARCH = "https://api.x.com/2/tweets/search/recent"
 
@@ -263,6 +264,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path in ("/", "/index.html"):
             self.serve_app(user)
             return
+        if path in ("/pay", "/pay.html"):              # the full-page checkout
+            self.isolate = False
+            self.serve_app(user, "pay.html")
+            return
         if path in PRO_FILES and plan_of(user) != "pro":
             if path == "/luna.js":            # free accounts get the upgrade screen instead of Luna
                 self.path = "/luna-locked.js"
@@ -276,9 +281,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
-    def serve_app(self, user):
+    def serve_app(self, user, page="index.html"):
         # inject the signed-in account so the page knows the user and their wallet before any script runs
-        with open(os.path.join(HERE, "index.html"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, page), encoding="utf-8") as f:
             html = f.read()
         boot = json.dumps(public_user(user)).replace("</", "<\\/")
         html = html.replace("<head>", f"<head>\n<script>window.LUNEX_USER={boot};</script>", 1)
@@ -361,6 +366,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 status, info = "pending", "Waiting for the network to confirm your payment…"
             self.send_json({"status": status, "proUntil": info} if status == "ok" else {"status": status, "message": info},
                            200 if status != "error" else 400)
+            return
+        if path == "/api/pay/check":                 # QR / Solana Pay: look for a payment carrying this invoice's reference key
+            ref = str((self.read_json() or {}).get("ref", ""))
+            with db() as con:
+                inv = con.execute("SELECT status FROM invoices WHERE ref=? AND user_id=?", (ref, user["id"])).fetchone()
+            if not inv:
+                self.send_json({"status": "error", "message": "That payment request wasn't found. Start again."}, 400)
+                return
+            status, info = "pending", "Waiting for your payment…"
+            try:
+                sigs = [] if inv["status"] == "paid" else (rpc_call("getSignaturesForAddress", [
+                    payments.reference_for(ref), {"limit": 10, "commitment": "confirmed"}]) or [])
+                if inv["status"] == "paid":
+                    sigs = [{"signature": ""}]
+                for s in sigs:
+                    if s.get("err"):
+                        continue
+                    sig = s.get("signature", "")
+                    tx = rpc_call("getTransaction", [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0,
+                                                           "commitment": "confirmed"}]) if sig else None
+                    with _db_lock, db() as con:
+                        st, inf = payments.verify_payment(con, user["id"], ref, sig, lambda *_: tx)
+                    if st == "ok":
+                        status, info = st, inf
+                        break
+                    if st == "error":
+                        status, info = st, inf
+            except Exception:
+                pass
+            self.send_json({"status": status, "proUntil": info} if status == "ok" else {"status": status, "message": info})
             return
         if path in ("/api/stripe/checkout", "/api/stripe/portal"):
             b = self.read_json() or {}
