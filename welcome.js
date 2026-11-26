@@ -102,4 +102,9 @@ $('#signOut').addEventListener('click', async () => { await api('/api/logout', {
   setupGoogle();
 })();
 $('#topAction').addEventListener('click', () => { if (me) location.href = '/'; });
+// show the live Pro price (set on the server)
+api('/api/pay/config').then(c => {
+  const w = (c.plans || []).find(p => p.id === 'week'); const el = document.querySelector('.plan.pro .price');
+  if (w && el) el.innerHTML = `$${w.usd % 1 ? w.usd.toFixed(2) : w.usd}<span>/week</span>`;
+}).catch(() => { });
 })();

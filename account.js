@@ -21,13 +21,29 @@ const short = w => w ? w.slice(0, 4) + '…' + w.slice(-4) : 'Not set';
 window.LunexAccount = {
   user: U,
   isPro: () => U.plan === 'pro',
-  upgrade() {
-    // Checkout isn't wired up yet; Pro is switched on per account by the server owner for now.
-    const box = document.querySelector('.acct-upgrade-note');
-    if (box) { box.hidden = false; return; }
-    alert('Pro checkout is coming soon.');
+  upgrade() { window.LunexCheckout ? window.LunexCheckout.open() : alert('Checkout is still loading. Try again in a second.'); },
+  async billing() {
+    const r = await fetch('/api/stripe/portal', { method: 'POST' }); const j = await r.json().catch(() => ({}));
+    if (j.url) location.href = j.url; else alert(j.error || 'Billing page unavailable right now.');
   },
 };
+const fmtDate = t => new Date(t * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' });
+const now = Date.now() / 1000;
+
+// renewal banner: crypto passes don't auto-renew, so remind people before (and right after) they run out
+function banner() {
+  if (U.lifetime || U.card || !U.proUntil) return;
+  const left = U.proUntil - now;
+  let text = '';
+  if (left > 0 && left < 2 * 86400) text = `Your Pro pass ends ${left < 86400 ? 'in ' + Math.max(1, Math.round(left / 3600)) + ' hours' : 'tomorrow'}. Renew to keep Luna.`;
+  else if (left <= 0 && left > -7 * 86400) text = 'Your Pro pass has ended, so Luna is locked. Renew to unlock her again.';
+  if (!text || sessionStorage.getItem('lx-renew-hide') === String(Math.floor(U.proUntil))) return;
+  const b = document.createElement('div'); b.className = 'lx-renew';
+  b.innerHTML = `<span>${esc(text)}</span><button type="button" class="lx-renew-go">Renew Pro</button><button type="button" class="lx-renew-x" aria-label="Dismiss">✕</button>`;
+  b.querySelector('.lx-renew-go').onclick = () => window.LunexAccount.upgrade();
+  b.querySelector('.lx-renew-x').onclick = () => { sessionStorage.setItem('lx-renew-hide', String(Math.floor(U.proUntil))); b.remove(); };
+  const ab = document.querySelector('#alertBar'); ab ? ab.before(b) : document.body.prepend(b);
+}
 
 function mount() {
   const header = document.querySelector('header'); if (!header || header.querySelector('.acct')) return;
@@ -39,11 +55,13 @@ function mount() {
     </button>
     <div class="acct-menu" role="menu">
       <div class="acct-who"><b>${esc(U.name)}</b><small>${esc(U.email)}</small></div>
-      <div class="acct-row"><span>Plan</span><b>${U.plan === 'pro' ? 'Pro' : 'Free'}</b></div>
+      <div class="acct-row"><span>Plan</span><b>${U.plan === 'pro' ? (U.lifetime ? 'Pro' : U.card ? 'Pro · card' : 'Pro until ' + fmtDate(U.proUntil)) : 'Free'}</b></div>
       <div class="acct-row"><span>Wallet</span><b class="acct-wallet">${esc(short(U.wallet))}</b></div>
       <form class="acct-wform" hidden><input placeholder="New public wallet address" spellcheck="false"><button type="submit">Save</button><p class="acct-err"></p></form>
       <button type="button" class="acct-item" data-act="wallet">${U.wallet ? 'Change wallet' : 'Add wallet'}</button>
-      ${U.plan === 'pro' ? '' : '<button type="button" class="acct-item acct-up" data-act="upgrade">Upgrade to Pro: unlock Luna</button><p class="acct-upgrade-note" hidden>Pro checkout is coming soon. Your account will unlock Luna the moment it\'s switched on.</p>'}
+      ${U.plan !== 'pro' ? '<button type="button" class="acct-item acct-up" data-act="upgrade">Upgrade to Pro: unlock Luna</button>'
+        : (!U.lifetime && !U.card ? '<button type="button" class="acct-item acct-up" data-act="upgrade">Extend Pro</button>' : '')}
+      ${U.card ? '<button type="button" class="acct-item" data-act="billing">Manage billing</button>' : ''}
       <button type="button" class="acct-item" data-act="logout">Sign out</button>
     </div>`;
   const bell = header.querySelector('#notifyBtn');
@@ -54,7 +72,8 @@ function mount() {
   el.querySelector('.acct-menu').addEventListener('click', async e => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'logout') { await fetch('/api/logout', { method: 'POST' }).catch(() => { }); location.href = '/welcome'; }
-    if (act === 'upgrade') window.LunexAccount.upgrade();
+    if (act === 'upgrade') { el.classList.remove('open'); window.LunexAccount.upgrade(); }
+    if (act === 'billing') window.LunexAccount.billing();
     if (act === 'wallet') { const f = el.querySelector('.acct-wform'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); }
   });
   el.querySelector('.acct-wform').addEventListener('submit', async e => {
@@ -68,5 +87,6 @@ function mount() {
     location.reload();
   });
 }
-document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', mount) : mount();
+const start = () => { mount(); banner(); };
+document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start) : start();
 })();

@@ -3,7 +3,7 @@
 (() => {
 const q = s => document.querySelector(s);
 const page = q('#p-luna');
-const upgrade = () => window.LunexAccount ? window.LunexAccount.upgrade() : alert('Pro checkout is coming soon.');
+const upgrade = () => window.LunexAccount && window.LunexAccount.upgrade();
 
 const preview = `
   <div class="lk-chat" aria-hidden="true">
@@ -27,11 +27,11 @@ if (page) page.innerHTML = `
         <li><b>Ask anything:</b> runs on your own device, fast and private</li>
       </ul>
       <button type="button" class="lk-up">Upgrade to Pro</button>
-      <p class="acct-upgrade-note lk-note" hidden>Pro checkout is coming soon. Your account will unlock Luna the moment it's switched on.</p>
+      
     </div>
     ${preview}
   </div>`;
-page && page.querySelector('.lk-up').addEventListener('click', () => { page.querySelector('.lk-note').hidden = false; upgrade(); });
+page && page.querySelector('.lk-up').addEventListener('click', () => { upgrade(); });
 
 // nav: mark Luna as a Pro tab
 const tab = q('nav button[data-p="luna"]'); if (tab) tab.classList.add('nv-locked');
@@ -42,8 +42,8 @@ if (tele) {
   const sec = document.createElement('div'); sec.className = 'ov-meet lk-home';
   sec.innerHTML = `<div class="lk-copy"><h2>Unlock <em>Luna.</em></h2>
     <p>Buy, skip and sell calls on any coin, with the exact plan sized to your wallet. Upgrade to put her to work.</p>
-    <button type="button" class="lk-up">Upgrade to Pro</button><p class="acct-upgrade-note lk-note" hidden>Pro checkout is coming soon. Your account will unlock Luna the moment it's switched on.</p></div>${preview}`;
+    <button type="button" class="lk-up">Upgrade to Pro</button></div>${preview}`;
   tele.after(sec);
-  sec.querySelector('.lk-up').addEventListener('click', () => { sec.querySelector('.lk-note').hidden = false; upgrade(); });
+  sec.querySelector('.lk-up').addEventListener('click', () => { upgrade(); });
 }
 })();

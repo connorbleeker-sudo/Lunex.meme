@@ -1,9 +1,12 @@
 """Lunex server: serves the site, handles accounts, and relays read-only Solana RPC / X searches.
 
 Run:   python server.py              then open http://localhost:8765
-Admin: python server.py users                list accounts
-       python server.py pro  you@email.com   give an account Pro (Luna AI)
-       python server.py free you@email.com   back to Free
+Admin: python server.py users                list accounts (and paid passes)
+       python server.py payments             recent payments
+       python server.py pro  you@email.com   give an account Pro with no end date
+       python server.py free you@email.com   back to Free (also ends a paid pass)
+
+Payments: see payments.py for LUNEX_PAY_WALLET, prices and the Stripe settings.
 
 Google sign-in: set GOOGLE_CLIENT_ID (env var) or put {"google_client_id": "..."} in lunex.config.json.
 
@@ -29,6 +32,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import payments
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Hosting: Railway (and most hosts) set PORT and route traffic through an HTTPS proxy.
 HOSTED = bool(os.environ.get("PORT") or os.environ.get("RAILWAY_ENVIRONMENT"))
@@ -39,7 +44,7 @@ DB_PATH = os.environ.get("LUNEX_DB") or os.path.join(HERE, "lunex.db")
 CONFIG_PATH = os.path.join(HERE, "lunex.config.json")
 RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 ALLOWED = {"getTokenAccountsByOwner", "getBalance", "getSignaturesForAddress", "getTransaction",
-           "getSignatureStatuses", "sendTransaction"}  # sendTransaction only relays a tx the user's wallet already signed
+           "getSignatureStatuses", "sendTransaction", "getLatestBlockhash"}  # sendTransaction only relays a tx the user's wallet already signed
 X_SEARCH = "https://api.twitterapi.io/twitter/tweet/advanced_search"
 X_V2_SEARCH = "https://api.x.com/2/tweets/search/recent"
 
@@ -92,6 +97,7 @@ def init_db():
             user_id INTEGER NOT NULL,
             expires REAL NOT NULL
         );""")
+        payments.migrate(con)
 
 
 def hash_password(pw):
@@ -112,12 +118,16 @@ def check_password(pw, stored):
 def plan_of(u):
     # LUNEX_PRO_EMAILS="you@x.com,friend@y.com" makes those accounts Pro without touching the database
     owners = {e.strip().lower() for e in os.environ.get("LUNEX_PRO_EMAILS", "").split(",") if e.strip()}
-    return "pro" if u["email"].lower() in owners else (u["plan"] or "free")
+    if u["email"].lower() in owners or u["plan"] == "pro":       # owners / manually granted: Pro with no end date
+        return "pro"
+    return "pro" if (u["pro_until"] or 0) > time.time() else "free"   # paid pass still running
 
 
 def public_user(u):
+    lifetime = u["email"].lower() in {e.strip().lower() for e in os.environ.get("LUNEX_PRO_EMAILS", "").split(",") if e.strip()} or u["plan"] == "pro"
     return {"email": u["email"], "name": u["name"] or u["email"].split("@")[0], "wallet": u["wallet"] or "",
-            "plan": plan_of(u), "google": bool(u["google_sub"])}
+            "plan": plan_of(u), "google": bool(u["google_sub"]),
+            "proUntil": 0 if lifetime else (u["pro_until"] or 0), "lifetime": lifetime, "card": bool(u["stripe_customer"])}
 
 
 # simple per-IP throttle for sign-in attempts
@@ -197,6 +207,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         (hashlib.sha256(tok.encode()).hexdigest(), user_id, time.time() + SESSION_DAYS * 86400))
         return f"{SESSION_COOKIE}={tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_DAYS * 86400}{self.secure_flag()}"
 
+    def base_url(self):
+        proto = self.headers.get("X-Forwarded-Proto") or ("https" if HOSTED else "http")
+        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or f"localhost:{PORT}"
+        return f"{proto}://{host}"
+
     def secure_flag(self):
         # over HTTPS (the host's proxy says so), the login cookie is never sent over plain http
         return "; Secure" if self.headers.get("X-Forwarded-Proto", "").lower() == "https" else ""
@@ -222,6 +237,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         if path == "/api/config":
             self.send_json({"googleClientId": config()["google_client_id"]})
+            return
+        if path == "/api/pay/config":
+            self.send_json(payments.public_config())
             return
 
         if path in ("/welcome", "/welcome.html"):
@@ -307,9 +325,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"ok": True}, cookie=f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
             return
 
+        if path == "/api/stripe/webhook":            # called by Stripe's servers; verified by signature, not by session
+            n = int(self.headers.get("Content-Length", 0) or 0)
+            payload = self.rfile.read(n) if n <= 500000 else b""
+            try:
+                with _db_lock, db() as con:
+                    code, msg = payments.stripe_webhook(con, payload, self.headers.get("Stripe-Signature", ""))
+            except Exception as e:
+                code, msg = 500, str(e)
+            self.send_json({"result": msg}, code)
+            return
+
         user = self.current_user()
         if not user:
             self.send_json({"error": "Sign in first."}, 401)
+            return
+        if path == "/api/pay/invoice":
+            b = self.read_json() or {}
+            try:
+                with _db_lock, db() as con:
+                    inv = payments.create_invoice(con, user["id"], str(b.get("plan")), str(b.get("currency")))
+                self.send_json(inv)
+            except ValueError as e:
+                self.send_json({"error": str(e)}, 400)
+            return
+        if path == "/api/pay/confirm":
+            b = self.read_json() or {}
+            try:
+                sig = str(b.get("signature", ""))
+                tx = rpc_call("getTransaction", [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0, "commitment": "confirmed"}]) \
+                    if re.match(r"^[1-9A-HJ-NP-Za-km-z]{64,90}$", sig) else None   # network call outside the DB lock
+                with _db_lock, db() as con:
+                    status, info = payments.verify_payment(con, user["id"], str(b.get("ref", "")), sig, lambda *_: tx)
+            except Exception:
+                status, info = "pending", "Waiting for the network to confirm your payment…"
+            self.send_json({"status": status, "proUntil": info} if status == "ok" else {"status": status, "message": info},
+                           200 if status != "error" else 400)
+            return
+        if path in ("/api/stripe/checkout", "/api/stripe/portal"):
+            b = self.read_json() or {}
+            try:
+                url = (payments.stripe_checkout(user, str(b.get("plan")), self.base_url()) if path.endswith("checkout")
+                       else payments.stripe_portal(user, self.base_url()))
+                self.send_json({"url": url})
+            except ValueError as e:
+                self.send_json({"error": str(e)}, 400)
             return
         if path == "/api/wallet":
             body = self.read_json() or {}
@@ -420,14 +480,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+def rpc_call(method, params):
+    """Server-side Solana RPC call (used to verify payments)."""
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    req = urllib.request.Request(RPC, data=body, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read()).get("result")
+
+
 def admin(argv):
     init_db()
     with _db_lock, db() as con:
         if argv[0] == "users":
-            for u in con.execute("SELECT email, plan, wallet, google_sub IS NOT NULL AS g, created FROM users ORDER BY created"):
-                print(f"{u['email']:<40} {u['plan']:<5} {'google' if u['g'] else 'email ':<7} {u['wallet'] or '-'}")
+            for u in con.execute("SELECT email, plan, wallet, google_sub IS NOT NULL AS g, pro_until FROM users ORDER BY created"):
+                paid = time.strftime("%Y-%m-%d", time.localtime(u["pro_until"])) if (u["pro_until"] or 0) > time.time() else ""
+                print(f"{u['email']:<40} {u['plan']:<5} {'paid until ' + paid if paid else '':<22} {'google' if u['g'] else 'email ':<7} {u['wallet'] or '-'}")
+        elif argv[0] == "payments":
+            for p in con.execute("SELECT p.*, u.email FROM payments p JOIN users u ON u.id=p.user_id ORDER BY p.created DESC LIMIT 50"):
+                print(f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(p['created']))}  {p['email']:<32} {p['method']:<5} ${p['usd'] or 0:<6} {p['days'] or '':<3} {p['proof'][:24]}")
         elif argv[0] in ("pro", "free") and len(argv) > 1:
-            n = con.execute("UPDATE users SET plan=? WHERE email=?", (argv[0], argv[1].lower())).rowcount
+            n = con.execute("UPDATE users SET plan=?" + (", pro_until=0" if argv[0] == "free" else "") + " WHERE email=?", (argv[0], argv[1].lower())).rowcount
             print(f"{argv[1]} is now {argv[0].upper()}" if n else f"No account with email {argv[1]}")
         else:
             print(__doc__)
