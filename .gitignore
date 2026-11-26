@@ -1,0 +1,7 @@
+# accounts database and local secrets: never upload
+lunex.db
+lunex.db-*
+lunex.config.json
+# old copies and caches
+_original/
+__pycache__/

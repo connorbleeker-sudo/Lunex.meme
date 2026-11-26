@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lunex: live memecoin scanner</title>
+<style>
+  :root{--bg:#0a0b10;--card:#12141c;--line:#1f2230;--text:#e8e9f0;--dim:#8a8ea3;--green:#2ee59d;--red:#ff4d6d;--amber:#ffb84d;--accent:#8b5cf6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(10,11,16,.94);backdrop-filter:blur(8px);z-index:5;flex-wrap:wrap}
+  h1{font-size:20px;margin:0;letter-spacing:-.02em}
+  h1 span{color:var(--accent)}
+  nav{display:flex;gap:4px;background:var(--card);padding:4px;border-radius:10px;border:1px solid var(--line)}
+  nav button{background:transparent;border:0;color:var(--dim);font-weight:600;padding:7px 12px}
+  nav button.on{background:var(--accent);color:#fff}
+  nav .count{background:var(--red);color:#fff;border-radius:99px;padding:0 6px;font-size:11px;margin-left:4px}
+  .live{display:inline-flex;align-items:center;gap:6px;color:var(--dim);font-size:12px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:p 1.6s infinite}
+  .dot.off{background:var(--red);box-shadow:0 0 8px var(--red)}
+  @keyframes p{50%{opacity:.3}}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  input,select,button{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit}
+  button{cursor:pointer;background:var(--accent);border-color:var(--accent);font-weight:600}
+  button.ghost{background:var(--card);border-color:var(--line);font-weight:500}
+  .page{display:none;padding:20px 24px;max-width:1500px;margin:0 auto}
+  .page.on{display:block}
+  .split{display:grid;grid-template-columns:1fr 320px;gap:20px}
+  @media(max-width:1000px){.split{grid-template-columns:1fr}}
+  .note{background:#1a1626;border:1px solid #2e2645;color:#c9bff0;padding:10px 14px;border-radius:10px;font-size:12.5px;margin-bottom:16px}
+  .warn{background:#2a1418;border:1px solid #4a2028;color:#ffb3c0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s}
+  .card:hover{border-color:#353a52}
+  .card.smart{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber) inset}
+  .card.dead{opacity:.45}
+  .top{display:flex;gap:10px;align-items:center}
+  .top img{width:40px;height:40px;border-radius:10px;background:#222;object-fit:cover;flex:none}
+  .name{font-weight:700;font-size:15px;word-break:break-all}
+  .sub{color:var(--dim);font-size:12px}
+  .badge{margin-left:auto;padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;white-space:nowrap}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .stat{background:#0d0f15;border-radius:8px;padding:6px 8px;min-width:0}
+  .stat b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis}
+  .stat small{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+  .up{color:var(--green)}.down{color:var(--red)}
+  .bars{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center;font-size:12px}
+  .bar{height:7px;background:#0d0f15;border-radius:9px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:9px}
+  .flags{display:flex;gap:5px;flex-wrap:wrap}
+  .flag{font-size:11px;padding:2px 8px;border-radius:999px;background:#2a1418;color:#ff9aab}
+  .flag.ok{background:#11261d;color:#7debb8}
+  .flag.gold{background:#2b2210;color:var(--amber)}
+  .links{display:flex;gap:6px;flex-wrap:wrap}
+  .links a{font-size:12px;color:var(--text);text-decoration:none;background:#0d0f15;border:1px solid var(--line);padding:4px 9px;border-radius:7px}
+  .links a:hover{border-color:var(--accent)}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  .panel h3{margin:0 0 10px;font-size:14px}
+  .handle{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .handle a{color:var(--text);text-decoration:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .handle button{padding:2px 8px;background:transparent;border:0;color:var(--dim)}
+  .row{display:flex;gap:6px;flex-wrap:wrap}.row input{flex:1;min-width:0}
+  .empty{color:var(--dim);text-align:center;padding:40px}
+  .legend{font-size:12px;color:var(--dim)}
+  .legend p{margin:6px 0}
+  .legend a{color:#b9a5ff}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--dim);font-weight:500;font-size:11.5px;text-transform:uppercase}
+  td a{color:#b9a5ff;text-decoration:none}
+  .buy{color:var(--green);font-weight:700}.sell{color:var(--red);font-weight:700}
+  #alertBar{display:none;background:linear-gradient(90deg,#3a2a08,#2b1f06);border-bottom:1px solid var(--amber);color:#ffd88a;padding:10px 24px;font-weight:600}
+  #alertBar a{color:#fff}
+  .chip{background:#241d3d;color:#c9b8ff;padding:1px 6px;border-radius:6px;text-decoration:none;font-weight:600}
+  .chip:hover{background:var(--accent);color:#fff}
+  .summary{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .summary .stat{padding:10px 14px;min-width:150px}
+  .summary .stat b{font-size:18px}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="nova.css">
+<script src="account.js"></script>
+</head>
+<body data-page="overview">
+<header>
+  <a class="brand" href="#overview" aria-label="Lunex home"><span class="brand-orb"></span>Lun<em>ex</em></a>
+  <nav aria-label="Main navigation"><button data-p="overview" class="on">Home</button>
+    <button data-p="luna" class="nv-luna-tab">Luna</button>
+    <button data-p="scanner">Radar</button>
+    <button data-p="pump">Launches</button>
+    <button data-p="xfeed">Chatter<span id="bigCount" class="count" style="display:none"></span></button>
+    <button data-p="smart">Wallets<span id="smartCount" class="count" style="display:none"></span></button>
+    <button data-p="mine">Vault</button>
+    <button data-p="atlas" class="nv-hidden">Constellation</button><button data-p="guide" class="nv-hidden">Field guide</button></nav>
+  <div class="nv-more"><button type="button" class="ghost nv-more-btn">More <i class="ic ic-down-chev"></i></button>
+    <div class="nv-more-menu"><button type="button" data-go="atlas"><b>Constellation</b><small>Every coin as a star</small></button><button type="button" data-go="guide"><b>Field guide</b><small>What the scores mean</small></button></div></div>
+  <span class="live" style="margin-left:auto" title="Live data connection"><span id="wsDot" class="dot off"></span><span id="status">connecting…</span></span>
+  <button class="ghost" id="notifyBtn"><i class="ic ic-bell"></i> Alerts</button>
+</header>
+<div id="alertBar"></div>
+
+<!-- ============ OVERVIEW ============ -->
+<section class="page on" id="p-overview">
+  <div class="ov-hero">
+    <div class="ov-copy">
+      <h1 class="ov-title">Every launch,<br><em>scored live.</em></h1>
+      <p class="ov-sub">Lunex reads new pump.fun mints, DexScreener pairs, the wallets you follow and posts from large X accounts, then scores each coin for momentum and safety. It shows what is happening now. It does not predict prices.</p>
+      <div class="ov-cta"><button data-open="scanner">Open the radar</button><button class="nv-ghost" data-open="pump">Watch launches</button></div>
+    </div>
+    <div></div>
+    <dl class="ov-hud"><dt>Top mover</dt><dd id="ov-hud-hot">waiting for data</dd><dt>Sources</dt><dd>DexScreener, PumpPortal, Solana RPC</dd></dl>
+  </div>
+
+  <div class="ov-telemetry">
+    <div><small>LAUNCHES SEEN</small><b data-count="launches">0</b><span>on pump.fun this session</span></div>
+    <div><small>PAIRS ON RADAR</small><b data-count="pairs">0</b><span>scored live from DexScreener</span></div>
+    <div><small>RUNNING HOT</small><b data-count="hot">0</b><span>momentum 60 or higher</span></div>
+    <div><small>SOLANA</small><b data-count="sol">n/a</b><span>live SOL price</span></div>
+  </div>
+
+  <div class="ov-sec">
+    <div class="ov-sec-head"><div><h2>Five views, <em>one market.</em></h2></div></div>
+    <div class="ov-grid">
+      <button class="ov-sys" data-open="scanner" style="--sys:#3de8ff"><canvas data-viz="radar"></canvas><small>01</small><h3>Radar</h3><p>Every live DexScreener pair on one sweep, scored 0 to 100 for momentum and for safety. Hot pairs sit near the center.</p><span class="go" aria-hidden="true">&#8599;</span></button>
+      <button class="ov-sys" data-open="pump" style="--sys:#ff7a3d"><canvas data-viz="bay"></canvas><small>02</small><h3>Launches</h3><p>New pump.fun mints about a second after they happen, with unique buyers, dev sells and other early red flags.</p><span class="go" aria-hidden="true">&#8599;</span></button>
+      <button class="ov-sys" data-open="xfeed" style="--sys:#a46bff"><canvas data-viz="scope"></canvas><small>03</small><h3>Chatter</h3><p>Posts from large X accounts that mention a ticker or contract, ranked by follower count and how fast likes arrive.</p><span class="go" aria-hidden="true">&#8599;</span></button>
+      <button class="ov-sys" data-open="smart" style="--sys:#3dffb0"><canvas data-viz="graph"></canvas><small>04</small><h3>Wallets</h3><p>Wallets you choose to follow, linked to the coins they trade. Two or more buying the same coin is flagged.</p><span class="go" aria-hidden="true">&#8599;</span></button>
+      <button class="ov-sys" data-open="mine" style="--sys:#ffc861"><canvas data-viz="vault"></canvas><small>05</small><h3>Vault</h3><p>Your own positions with entry, profit and loss, and alerts at the take-profit and stop-loss levels you set.</p><span class="go" aria-hidden="true">&#8599;</span></button>
+    </div>
+  </div>
+
+  <div class="ov-truth"><div><p>Most new memecoins go to zero. The ones that don't usually show it early: who is buying, how fast, and whether the dev still holds. Lunex doesn't predict which coin that will be. It puts those three things in front of you while they happen.</p><small>Scores describe current trading activity. They are not price forecasts or financial advice.</small></div></div>
+
+  <div class="nv-foot"><b>Lunex</b><span>Data from DexScreener, PumpPortal and the Solana RPC</span><span>Not financial advice</span></div>
+</section>
+
+<!-- ============ LUNA (filled in by luna.js) ============ -->
+<section class="page" id="p-luna"></section>
+
+<!-- ============ CONSTELLATION ============ -->
+<section class="page" id="p-atlas">
+  <div class="nv-atlas">
+    <div class="nv-viz"><canvas class="nv-click" data-viz="atlas"></canvas><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><span class="tag">SAFETY → · MOMENTUM ↑</span><span class="readout" data-ro="atlas">mapping…</span><span class="readout readout-r" data-ro2="atlas">click a star</span></div>
+    <aside id="signal-detail" class="panel"><div class="nv-eyebrow">SIGNAL INSPECTOR</div><h3>Select a star</h3><p class="legend">Each star is a pair from the radar. Brighter and bigger means more volume. Lines link coins that sit close together on the map. Scores summarize what is happening now. They don't predict returns.</p></aside>
+  </div>
+</section>
+
+<!-- ============ FIELD GUIDE ============ -->
+<section class="page" id="p-guide">
+  <div class="nv-guide">
+    <article class="panel"><span class="gi">I · MOMENTUM</span><h3>Heat.</h3><p>A 0–100 snapshot of buy pressure, volume against liquidity, price change and trade count. Healthy runs and short-lived pumps both read hot.</p></article>
+    <article class="panel"><span class="gi">II · SAFETY</span><h3>Armor.</h3><p>Starts at 100 and loses points for every observed risk: thin liquidity, a brand-new pair, no sells, no socials, parabolic candles. It is not an audit.</p></article>
+    <article class="panel"><span class="gi">III · LIQUIDITY</span><h3>Exit door.</h3><p>Liquidity is how much can actually leave. A $1M market cap with $10K liquidity means a small sell moves the price a lot.</p></article>
+    <article class="panel"><span class="gi">IV · LAUNCHES</span><h3>First minutes.</h3><p>Brand-new coins have no history. Dev sells, a handful of wallets doing all the buying, and big dev launch buys are the classic rug tells.</p></article>
+  </div>
+  <div class="nv-faq panel" style="padding:10px 30px">
+    <details open><summary>Where does the data come from?</summary><p>The radar reads DexScreener. The launch bay streams pump.fun via PumpPortal. Wallets and the vault read the Solana blockchain through the local server's read-only relay. The X feed uses whichever API key you connect.</p></details>
+    <details><summary>What does the constellation show?</summary><p>Horizontal position is the safety score and vertical position is momentum. Star size is volume. The top-right corner, hot and solid, is where the rare good setups live.</p></details>
+    <details><summary>Why can a feed be empty?</summary><p>A provider can be rate limited, not connected yet, or simply waiting for the next event. An empty view doesn't mean nothing is happening.</p></details>
+    <details><summary>Can Lunex trade for me?</summary><p>No. It watches, scores and alerts. You place the trades. Scores are not price forecasts, and most new memecoins go to zero.</p></details>
+  </div>
+</section>
+
+<!-- ============ SCANNER ============ -->
+<section class="page" id="p-scanner">
+  <div class="split">
+    <div>
+      <div class="controls">
+        <input id="search" placeholder="Paste contract address or ticker…" size="32">
+        <select id="chain">
+          <option value="">All chains</option><option value="solana" selected>Solana</option><option value="base">Base</option><option value="ethereum">Ethereum</option><option value="bsc">BSC</option>
+        </select>
+        <select id="sort">
+          <option value="momentum">Sort: Momentum</option><option value="safety">Sort: Safest</option><option value="volume">Sort: Volume 1h</option><option value="new">Sort: Newest</option>
+        </select>
+        <button id="refresh">Refresh</button>
+      </div>
+      <div class="note">Scores come from live trading data (DexScreener): buy pressure, volume, liquidity, price action, age. They show what is happening <b>right now</b>. They are not a price forecast. Most new memecoins go to zero.</div>
+      <div id="grid" class="grid"><div class="empty">Scanning new launches…</div></div>
+    </div>
+    <aside>
+      <div class="panel legend">
+        <h3 style="color:var(--text)">X Accounts</h3>
+        <p>"From my list" on any coin searches X for posts about it from the accounts you track in the <b>X Feed</b> tab (<span id="handleCount">0</span> tracked).</p>
+      </div>
+      <div class="panel legend">
+        <h3 style="color:var(--text)">How scoring works</h3>
+        <p><b class="up">Momentum (0–100)</b>: 1h buy/sell ratio, 1h volume compared to liquidity, 1h and 6h price change, trade count.</p>
+        <p><b style="color:var(--amber)">Safety (0–100)</b>: starts at 100. Points come off for thin liquidity, very new pairs, market cap far above liquidity, no sells (possible honeypot), no socials, parabolic pumps, and dumps.</p>
+        <p>Hot and safe is rare. Hot and unsafe is usually a pump that's about to dump.</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ PUMP.FUN LIVE ============ -->
+<section class="page" id="p-pump">
+  <div class="controls">
+    <select id="pumpSort"><option value="score">Sort: Early signal</option><option value="new">Sort: Newest</option><option value="mcap">Sort: Market cap</option></select>
+    <label class="live"><input type="checkbox" id="hideDead" checked> Hide dev-dumped &amp; dead coins</label>
+    <span class="live" id="pumpStats"></span>
+  </div>
+  <div class="note">Every coin launched on pump.fun shows up here within about a second, along with its live trades. The newest 60 are tracked at a time. <b>Early signal</b> combines unique buyers, buy pressure, SOL volume, market cap growth, and whether your smart wallets bought. The red flags matter more than the score. When the dev sells, that's the classic rug.</div>
+  <div id="pumpGrid" class="grid"><div class="empty">Waiting for the next launch…</div></div>
+</section>
+
+<!-- ============ X FEED ============ -->
+<section class="page" id="p-xfeed">
+  <div class="split">
+    <div>
+      <div class="panel" style="border-color:#5a2030">
+        <h3><i class="ic ic-siren"></i> BIG MOVES <span class="sub">(high-impact posts from the last 24h)</span></h3>
+        <div id="bigMoves"><p class="legend">Nothing big yet. Posts from mega accounts (10M+ followers) about anything crypto or meme, or any tracked post going viral fast, get pinned here and trigger an alert.</p></div>
+      </div>
+      <div class="controls">
+        <input id="xFilter" placeholder="Filter feed (word, $ticker, @user)…" size="30">
+        <label class="live"><input type="checkbox" id="xCryptoOnly"> Crypto/meme posts only</label>
+        <span class="live" id="xStatus"></span>
+      </div>
+      <div id="xFeed"><div class="empty">Add your twitterapi.io key on the right to start the live feed.</div></div>
+    </div>
+    <aside>
+      <div class="panel">
+        <h3><i class="ic ic-sliders"></i> Feed setup</h3>
+        <select id="xProv" style="width:100%;margin-bottom:6px">
+          <option value="x">Official X API (bearer token from developer.x.com)</option>
+          <option value="tapi">twitterapi.io (API key)</option>
+        </select>
+        <div class="row"><input id="xKey" type="password" placeholder="Paste key / bearer token"><button id="xSaveKey">Save</button></div>
+        <p class="legend" id="xKeyStatus"></p>
+        <div class="row" style="margin-top:8px;align-items:center">
+          <span class="legend">Check every</span>
+          <select id="xInterval"><option value="60">1 min</option><option value="120" selected>2 min</option><option value="300">5 min</option><option value="600">10 min</option></select>
+          <button class="ghost" id="xPause">Pause</button>
+        </div>
+        <label class="live" style="margin-top:8px"><input type="checkbox" id="xDiscover" checked> Auto-discover: search all of X for memecoin talk and auto-add every account with 3K+ followers (up to 1,000)</label>
+        <p class="legend" id="xCost"></p>
+        <p class="legend"><b>Official X API:</b> in the <a href="https://developer.x.com/en/portal/dashboard" target="_blank" rel="noopener">X developer portal</a>, open your app's "Keys and tokens" and copy the <b>Bearer Token</b>. It uses the v2 recent-search endpoint and is billed by your X API plan.</p>
+        <p class="legend"><b>twitterapi.io:</b> sign up at <a href="https://twitterapi.io" target="_blank" rel="noopener">twitterapi.io</a> and copy your API key. Pay as you go, about $0.15 per 1,000 posts.</p>
+        <p class="legend">Either way it's one paste, and everything after that is automatic. The key is saved only in this browser.</p>
+      </div>
+      <div class="panel">
+        <h3>Tracked accounts (<span id="xCount">0</span>/1000)</h3>
+        <textarea id="xBulk" rows="3" style="width:100%;background:#0d0f15;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical" placeholder="Paste handles or x.com links. Spaces, commas, or new lines all work. You can paste lots at once."></textarea>
+        <div class="row" style="margin-top:6px"><button id="xAdd">Add</button><button class="ghost" id="xClear">Clear all</button></div>
+        <div id="xList" style="margin-top:8px;max-height:320px;overflow:auto"></div>
+      </div>
+      <div class="panel legend">
+        <h3 style="color:var(--text)">How the list fills itself</h3>
+        <p>It starts with well-known accounts that have moved crypto and meme markets. With auto-discover on, every check searches all of X for memecoin talk, and any account with 3K+ followers that shows up gets added automatically, up to 1,000. Tracked accounts are checked in rotation so the cost stays flat as the list grows. You can still paste extra handles in yourself if you want.</p>
+        <p><b>Impact score</b> = how big the account is, plus how fast the post is getting likes, plus whether it mentions a $ticker, contract address, or meme/crypto words. Score 70+ = BIG MOVE.</p>
+        <p>A big account posting a coin often means they're already in it. Getting in after a call is usually buying from them.</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ SMART WALLETS ============ -->
+<section class="page" id="p-smart">
+  <div class="split">
+    <div>
+      <div class="panel">
+        <h3><i class="ic ic-network"></i> Convergence: 2+ of your wallets bought the same coin (last 30 min)</h3>
+        <div id="convergence"><p class="legend">Nothing yet. This fills in when two or more wallets you track buy the same coin.</p></div>
+      </div>
+      <div class="panel">
+        <h3>Live trades from your tracked wallets</h3>
+        <div id="smartFeed"><p class="legend">No trades yet. Add wallets on the right, and their pump.fun buys and sells will stream in here live.</p></div>
+      </div>
+    </div>
+    <aside>
+      <div class="panel">
+        <h3>Tracked wallets</h3>
+        <div class="row" style="margin-bottom:6px"><input id="wName" placeholder="Nickname" style="flex:.6"></div>
+        <div class="row"><input id="wAddr" placeholder="Solana wallet address"><button id="addWallet">Track</button></div>
+        <div id="walletList" style="margin-top:8px"></div>
+      </div>
+      <div class="panel legend">
+        <h3 style="color:var(--text)"><i class="ic ic-zap"></i> Real-time mode (optional)</h3>
+        <p id="keyStatus"></p>
+        <div class="row"><input id="ppKey" type="password" placeholder="PumpPortal API key"><button id="saveKey">Save</button></div>
+        <p>Without a key, wallets are checked on-chain every 30 seconds, which works fine. With a key, trades show up the instant they happen and dev-sells get flagged. To get one: generate a key at <a href="https://pumpportal.fun" target="_blank" rel="noopener">pumpportal.fun</a> and send 0.02 SOL to the wallet it creates. Use a throwaway amount, and store the private key it shows you somewhere safe. Never paste that private key here. The key is saved only in this browser.</p>
+      </div>
+      <div class="panel legend">
+        <h3 style="color:var(--text)">Where to find good wallets</h3>
+        <p>Pick wallets by their <b>on-chain record</b>, not by follower count. Many big X accounts get paid to shill and sell into their own followers.</p>
+        <p>Leaderboards that rank wallets by real profit: <a href="https://kolscan.io/leaderboard" target="_blank" rel="noopener">kolscan.io</a>, <a href="https://gmgn.ai" target="_blank" rel="noopener">gmgn.ai</a> (Smart Money / KOL tabs), <a href="https://cielo.finance" target="_blank" rel="noopener">cielo.finance</a>. Copy the addresses of wallets with consistent 30-day profits and plenty of trades, not one lucky hit.</p>
+        <p>Copy-trading has a catch. By the time you see their buy, you're buying after them, and some KOLs dump on the copiers.</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ MY WALLET ============ -->
+<section class="page" id="p-mine">
+  <div class="panel" style="border-color:#2e4a3a">
+    <h3><i class="ic ic-target"></i> My trades: take-profit &amp; stop-loss alerts</h3>
+    <div class="row" style="align-items:center">
+      <input id="tCA" placeholder="Coin contract address" style="flex:2">
+      <input id="tEntry" placeholder="Entry market cap $ (blank = now)" style="flex:1">
+      <span class="legend">Sell at</span><select id="tTP"><option value="1.5">1.5x</option><option value="2" selected>2x</option><option value="3">3x</option><option value="5">5x</option></select>
+      <span class="legend">Stop at</span><select id="tSL"><option value="25">−25%</option><option value="40" selected>−40%</option><option value="50">−50%</option><option value="0">none</option></select>
+      <button id="tAdd">Watch</button>
+    </div>
+    <div id="tList" style="margin-top:10px"><p class="legend">Add a coin you bought. Lunex checks it every 15 seconds and alerts you (banner + sound + desktop notification) the moment it hits your target or your stop. Turn on alerts at the top.</p></div>
+  </div>
+  <div class="controls" style="align-items:center">
+    <button id="connectWallet" style="font-size:15px;padding:10px 18px"><i class="ic ic-wallet"></i> Connect wallet</button>
+    <button class="ghost" id="disconnectWallet" style="display:none">Disconnect</button>
+    <span class="legend">or paste an address:</span>
+    <input id="myAddr" placeholder="Your PUBLIC Solana wallet address" size="46">
+    <button class="ghost" id="loadMine">Check positions</button>
+  </div>
+  <div class="note warn"><i class="ic ic-lock"></i> <b>Connect wallet</b> uses the same wallet you log into pump.fun with (Phantom, Solflare, or Backpack). It only reads your <b>public address</b>. Lunex never asks you to sign or approve anything. <b>Never</b> type your private key or seed phrase into any site, bot, or DM, including this one. Anyone who asks for it is trying to drain you.</div>
+  <div id="mineSummary"></div>
+  <div id="mineGrid" class="grid"></div>
+</section>
+
+<script>
+const API = 'https://api.dexscreener.com';
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const $ = s => document.querySelector(s);
+const fmt = n => n == null || isNaN(n) ? 'n/a' : n >= 1e9 ? '$' + (n/1e9).toFixed(2) + 'B' : n >= 1e6 ? '$' + (n/1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + (n/1e3).toFixed(1) + 'K' : '$' + n.toFixed(n < 1 ? 6 : 2);
+const pct = n => n == null ? 'n/a' : (n > 0 ? '+' : '') + n.toFixed(1) + '%';
+const clamp = (v, a=0, b=100) => Math.max(a, Math.min(b, v));
+const ageStr = ms => { const s = ms / 1000; return s < 60 ? Math.round(s) + 's' : s < 3600 ? Math.round(s/60) + 'm' : s < 172800 ? (s/3600).toFixed(1) + 'h' : Math.round(s/86400) + 'd'; };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = a => a ? a.slice(0, 4) + '…' + a.slice(-4) : '';
+const isAddr = a => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);
+const store = (k, v) => v === undefined ? JSON.parse(localStorage.getItem(k) || 'null') : localStorage.setItem(k, JSON.stringify(v));
+async function getJSON(url) { const r = await fetch(url); if (!r.ok) throw new Error(r.status); return r.json(); }
+
+// ---------- tabs ----------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.p));
+  if (b.dataset.p === 'smart') { smartUnseen = 0; drawSmartCount(); }
+});
+
+// ---------- alerts ----------
+$('#notifyBtn').onclick = async () => { const r = await Notification.requestPermission(); $('#notifyBtn').innerHTML = r === 'granted' ? '<i class="ic ic-bell"></i> Alerts on' : '<i class="ic ic-bell-off"></i> Alerts blocked'; };
+if (window.Notification && Notification.permission === 'granted') $('#notifyBtn').innerHTML = '<i class="ic ic-bell"></i> Alerts on';
+function notify(title, body) {
+  if (window.Notification && Notification.permission === 'granted') new Notification(title, { body });
+}
+
+// ---------- SOL price ----------
+let solUsd = 0;
+async function loadSol() {
+  try {
+    const pairs = await getJSON(`${API}/tokens/v1/solana/${SOL_MINT}`);
+    const best = pairs.filter(p => p.baseToken.address === SOL_MINT && /USD/.test(p.quoteToken.symbol)).sort((a, b) => (b.liquidity?.usd||0) - (a.liquidity?.usd||0))[0];
+    if (best) solUsd = +best.priceUsd;
+  } catch {}
+}
+
+// ======================================================================
+// SCANNER (DexScreener)
+// ======================================================================
+let tokens = [];
+function analyze(p) {
+  const liq = p.liquidity?.usd || 0, fdv = p.fdv || p.marketCap || 0;
+  const t1 = p.txns?.h1 || {buys:0,sells:0}, t24 = p.txns?.h24 || {buys:0,sells:0};
+  const v1 = p.volume?.h1 || 0, v24 = p.volume?.h24 || 0;
+  const c1 = p.priceChange?.h1 || 0, c6 = p.priceChange?.h6 || 0, c24 = p.priceChange?.h24 || 0;
+  const age = p.pairCreatedAt ? Date.now() - p.pairCreatedAt : null;
+  const trades1 = t1.buys + t1.sells;
+  const buyRatio = trades1 ? t1.buys / trades1 : 0.5;
+
+  let m = 0;
+  m += clamp((buyRatio - 0.4) / 0.3 * 30, 0, 30);
+  m += clamp(liq ? (v1 / liq) * 40 : 0, 0, 25);
+  m += clamp(c1 / 2, -10, 20);
+  m += clamp(c6 / 5, -5, 10);
+  m += clamp(Math.log10(trades1 + 1) * 6, 0, 15);
+  const momentum = Math.round(clamp(m));
+
+  const flags = []; let s = 100;
+  const onCurve = p.dexId === 'pumpfun';
+  if (onCurve) flags.push('Still on pump.fun curve');
+  if (!onCurve && liq < 10000) { s -= 30; flags.push('Liquidity under $10K'); } else if (!onCurve && liq < 50000) { s -= 20; flags.push('Thin liquidity (<$50K)'); }
+  if (age != null && age < 36e5) { s -= 20; flags.push('Under 1h old'); } else if (age != null && age < 6*36e5) { s -= 12; flags.push('Under 6h old'); }
+  if (!onCurve && liq && fdv / liq > 30) { s -= 15; flags.push('MC far above liquidity'); }
+  if (t24.buys > 20 && t24.sells === 0) { s -= 35; flags.push('No sells (honeypot?)'); }
+  else if (t24.sells && t24.buys / t24.sells > 6) { s -= 10; flags.push('Hardly anyone selling'); }
+  const socials = (p.info?.socials || []).length + (p.info?.websites || []).length;
+  if (!socials) { s -= 12; flags.push('No socials/site'); }
+  if (c24 > 1000) { s -= 30; flags.push('Up over 1000% in 24h (late entry risk)'); }
+  else if (c24 > 300) { s -= 12; flags.push('Up over 300% in 24h'); }
+  if (c1 < -30) { s -= 15; flags.push('Dumping: ' + pct(c1) + ' in 1h'); }
+  if (v24 < 1000 && age > 864e5) { s -= 25; flags.push('Basically dead (no volume)'); }
+  const safety = Math.round(clamp(s));
+
+  let label, color;
+  if (momentum >= 60 && safety >= 70 && c24 < 1000) { label = '<i class="ic ic-flame"></i> Hot + solid'; color = 'var(--green)'; }
+  else if (momentum >= 60) { label = '<i class="ic ic-warn"></i> Hot but risky'; color = 'var(--amber)'; }
+  else if (momentum >= 35) { label = '<i class="ic ic-eye"></i> Warming up'; color = 'var(--accent)'; }
+  else { label = '<i class="ic ic-snow"></i> Cold'; color = 'var(--dim)'; }
+  return { liq, fdv, v1, v24, c1, c6, c24, age, buyRatio, trades1, momentum, safety, flags, label, color };
+}
+
+async function loadPairs(list) {
+  const byChain = {};
+  list.forEach(t => (byChain[t.chainId] ||= new Set()).add(t.tokenAddress));
+  const reqs = [];
+  for (const [chain, set] of Object.entries(byChain)) {
+    const arr = [...set];
+    for (let i = 0; i < arr.length; i += 30) reqs.push(getJSON(`${API}/tokens/v1/${chain}/${arr.slice(i, i+30).join(',')}`).catch(() => []));
+  }
+  const pairs = (await Promise.all(reqs)).flat();
+  const best = {};
+  for (const p of pairs) {
+    const k = p.chainId + ':' + p.baseToken.address;
+    if (!best[k] || (p.liquidity?.usd || 0) > (best[k].liquidity?.usd || 0)) best[k] = p;
+  }
+  return best;
+}
+
+async function scan() {
+  try {
+    const [profiles, boosts, topBoosts] = await Promise.all([
+      getJSON(`${API}/token-profiles/latest/v1`).catch(() => []),
+      getJSON(`${API}/token-boosts/latest/v1`).catch(() => []),
+      getJSON(`${API}/token-boosts/top/v1`).catch(() => []),
+    ]);
+    const chain = $('#chain').value;
+    const list = [...profiles, ...boosts, ...topBoosts].filter(t => t.tokenAddress && (!chain || t.chainId === chain));
+    tokens = Object.values(await loadPairs(list)).map(p => ({ pair: p, a: analyze(p) }));
+    renderScanner();
+  } catch (e) { $('#grid').innerHTML = `<div class="empty">Scan failed: ${esc(e.message)}</div>`; }
+}
+
+async function searchCA(q) {
+  const r = await getJSON(`${API}/latest/dex/search?q=${encodeURIComponent(q)}`).catch(() => ({pairs:[]}));
+  const best = {};
+  for (const p of r.pairs || []) { const k = p.chainId + ':' + p.baseToken.address; if (!best[k] || (p.liquidity?.usd||0) > (best[k].liquidity?.usd||0)) best[k] = p; }
+  tokens = Object.values(best).map(p => ({ pair: p, a: analyze(p) }));
+  renderScanner();
+}
+
+function xLinks(sym, addr) {
+  const handles = getHandles();
+  const q = `($${sym} OR ${addr})`;
+  const mine = handles.length ? `${q} (${handles.slice(0, 25).map(h => 'from:' + h).join(' OR ')})` : null;
+  return { all: `https://x.com/search?q=${encodeURIComponent(q)}&f=live`, mine: mine && `https://x.com/search?q=${encodeURIComponent(mine)}&f=live` };
+}
+
+function dexCard(p, a, extra = '') {
+  const sym = esc(p.baseToken.symbol), x = xLinks(p.baseToken.symbol, p.baseToken.address);
+  const flagHtml = a.flags.length ? a.flags.map(f => `<span class="flag">${esc(f)}</span>`).join('') : '<span class="flag ok">No major red flags</span>';
+  const bar = (v, c) => `<div class="bar"><i style="width:${v}%;background:${c}"></i></div>`;
+  return `<div class="card">
+    <div class="top">
+      <img src="${esc(p.info?.imageUrl || '')}" onerror="this.style.visibility='hidden'" alt="">
+      <div><div class="name">$${sym}</div><div class="sub">${esc(p.baseToken.name)} · ${esc(p.chainId)} · ${a.age != null ? ageStr(a.age) + ' old' : 'age ?'}</div></div>
+      <span class="badge" style="background:color-mix(in srgb, ${a.color} 18%, transparent);color:${a.color}">${a.label}</span>
+    </div>
+    ${extra}
+    <div class="bars">
+      <span>Momentum</span>${bar(a.momentum, 'var(--green)')}<b>${a.momentum}</b>
+      <span>Safety</span>${bar(a.safety, 'var(--amber)')}<b>${a.safety}</b>
+    </div>
+    <div class="stats">
+      <div class="stat"><small>Price</small><b>${fmt(+p.priceUsd)}</b></div>
+      <div class="stat"><small>Mkt cap</small><b>${fmt(a.fdv)}</b></div>
+      <div class="stat"><small>Liquidity</small><b>${p.dexId === 'pumpfun' ? 'On curve' : fmt(a.liq)}</b></div>
+      <div class="stat"><small>Vol 1h</small><b>${fmt(a.v1)}</b></div>
+      <div class="stat"><small>1h</small><b class="${a.c1>=0?'up':'down'}">${pct(a.c1)}</b></div>
+      <div class="stat"><small>6h</small><b class="${a.c6>=0?'up':'down'}">${pct(a.c6)}</b></div>
+      <div class="stat"><small>24h</small><b class="${a.c24>=0?'up':'down'}">${pct(a.c24)}</b></div>
+      <div class="stat"><small>Buys 1h</small><b>${Math.round(a.buyRatio*100)}%</b></div>
+    </div>
+    <div class="flags">${flagHtml}</div>
+    <div class="links">
+      <a href="${esc(p.url)}" target="_blank" rel="noopener"><i class="ic ic-chart"></i> Chart</a>
+      <a href="${x.all}" target="_blank" rel="noopener">X mentions</a>
+      ${x.mine ? `<a href="${x.mine}" target="_blank" rel="noopener"><i class="ic ic-star"></i> From my list</a>` : ''}
+      <a href="#" onclick="navigator.clipboard.writeText('${esc(p.baseToken.address)}');this.textContent='Copied';return false"><i class="ic ic-copy"></i> CA</a>
+      ${p.chainId === 'solana' ? `<a href="#" onclick="watchCoin('${esc(p.baseToken.address)}');return false"><i class="ic ic-target"></i> Set alert</a>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderScanner() {
+  const sort = $('#sort').value;
+  const list = [...tokens].sort((x, y) =>
+    sort === 'safety' ? y.a.safety - x.a.safety :
+    sort === 'volume' ? y.a.v1 - x.a.v1 :
+    sort === 'new' ? (y.pair.pairCreatedAt||0) - (x.pair.pairCreatedAt||0) :
+    (y.a.momentum + y.a.safety * .3) - (x.a.momentum + x.a.safety * .3));
+  $('#grid').innerHTML = list.length ? list.map(({ pair, a }) => dexCard(pair, a)).join('') : '<div class="empty">No coins found. Try another chain or hit Refresh.</div>';
+}
+
+// ======================================================================
+// X FEED (twitterapi.io via local server)
+// ======================================================================
+// Starter accounts: well-known people/projects whose posts have moved crypto & meme markets.
+const STARTER_X = ['elonmusk', 'realDonaldTrump', 'cz_binance', 'VitalikButerin', 'saylor', 'brian_armstrong',
+  'aeyakovenko', 'rajgokal', 'solana', 'a1lon9', 'pumpdotfun', 'blknoiz06', 'MustStopMurad', 'cobie', 'dogecoin', 'binance', 'coinbase'];
+const MAX_X = 1000;
+const DISCOVER_MIN_FOLLOWERS = 3000;
+const CHUNKS_PER_CHECK = 8;   // tracked accounts are checked in rotation to keep cost flat
+const DISCOVER_QUERY = '(memecoin OR memecoins OR "pump.fun" OR pumpfun OR "meme coin" OR "new coin" OR "100x" OR "1000x" OR "ape in" OR "aped" OR "CA:" OR "solana meme" OR "$SOL" OR "$DOGE" OR "$PEPE" OR "$WIF" OR "$BONK") -filter:replies';
+const getHandles = () => {
+  let h = store('mr_xaccounts');
+  if (!h) { h = [...new Set([...STARTER_X, ...(store('mr_handles') || [])])]; store('mr_xaccounts', h); }
+  return h;
+};
+const setHandles = h => { store('mr_xaccounts', h.slice(0, MAX_X)); drawHandles(); renderScanner(); xCostEstimate(); };
+function drawHandles() {
+  const h = getHandles();
+  $('#handleCount').textContent = h.length; $('#xCount').textContent = h.length;
+  $('#xList').innerHTML = h.length ? h.map((x, i) => `<div class="handle"><a href="https://x.com/${esc(x)}" target="_blank" rel="noopener">@${esc(x)}</a><button onclick="removeHandle(${i})">✕</button></div>`).join('') : '<p class="legend">No accounts yet.</p>';
+}
+window.removeHandle = i => { const h = getHandles(); h.splice(i, 1); setHandles(h); };
+$('#xAdd').onclick = () => {
+  const found = $('#xBulk').value.split(/[\s,;]+/).map(v => v.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, '').split(/[/?]/)[0]).filter(v => /^\w{1,15}$/.test(v));
+  const cur = getHandles(), lower = new Set(cur.map(x => x.toLowerCase()));
+  const add = found.filter(v => !lower.has(v.toLowerCase()) && lower.add(v.toLowerCase()));
+  setHandles([...cur, ...add]);
+  $('#xBulk').value = '';
+  if (cur.length + add.length > MAX_X) alert(`Limit is ${MAX_X} accounts. Extra ones were skipped.`);
+};
+$('#xClear').onclick = () => { if (confirm('Remove all tracked X accounts?')) setHandles([]); };
+
+const xTweets = new Map();         // id -> tweet
+const xAlerted = new Set(store('mr_xalerted') || []);
+let xLastPoll = 0, xPaused = false, xTimer = null, xBigUnseen = 0;
+const xKey = () => store('mr_xkey');
+const CRYPTO_RE = /\b(crypto|coin|token|memecoin|meme|pump|moon|doge|shib|pepe|bonk|wif|sol|solana|eth|btc|bitcoin|ape|launch|airdrop|ca|contract|dex|degen|100x|1000x|lfg|wagmi|send it)\b|🚀|🌕|💎|\$[A-Za-z][A-Za-z0-9]{1,9}\b/i;
+const TICKER_RE = /\$([A-Za-z][A-Za-z0-9]{1,9})\b/g;
+const CA_RE = /\b([1-9A-HJ-NP-Za-km-z]{32,44}|0x[a-fA-F0-9]{40})\b/g;
+
+function chunkQueries(handles) {
+  const out = []; let cur = [];
+  const build = arr => `(${arr.map(h => 'from:' + h).join(' OR ')}) -filter:replies`;
+  for (const h of handles) {
+    if (build([...cur, h]).length + 30 > 500 && cur.length) { out.push(cur); cur = []; }
+    cur.push(h);
+  }
+  if (cur.length) out.push(cur);
+  return out.map(build);
+}
+
+function xCostEstimate() {
+  const chunks = chunkQueries(getHandles()).length, every = +$('#xInterval').value;
+  const perCheck = Math.min(chunks, CHUNKS_PER_CHECK) + (discoverOn() ? 2 : 0);
+  const checksPerDay = 86400 / every;
+  const perDay = checksPerDay * perCheck * 0.00015 + checksPerDay * (discoverOn() ? 25 : 3) * 0.00015;
+  const cycle = Math.ceil(chunks / CHUNKS_PER_CHECK);
+  const rot = cycle > 1 ? ` · every tracked account is checked every ${cycle} checks` : '';
+  $('#xCost').innerHTML = xProv() === 'x'
+    ? `${perCheck} searches per check (${Math.round(perCheck * 86400 / every).toLocaleString()}/day)${rot}. Billed by your X API plan. If you hit rate limits, pick a slower interval.`
+    : `${perCheck} searches per check${rot} · roughly <b>$${perDay.toFixed(2)}/day</b> while this tab is open. Pick a slower interval to spend less.`;
+}
+const discoverOn = () => store('mr_xdiscover') !== false;
+let rotation = 0;
+const chunkSince = {};
+
+function scoreTweet(t) {
+  const f = t.author?.followers || 0;
+  const tier = f >= 1e7 ? 'mega' : f >= 1e6 ? 'major' : f >= 1e5 ? 'big' : 'small';
+  const ageMin = Math.max(1, (Date.now() - new Date(t.createdAt)) / 60000);
+  const likesPerMin = (t.likeCount || 0) / ageMin;
+  const text = t.text || '';
+  const tickers = [...new Set([...text.matchAll(TICKER_RE)].map(m => m[1].toUpperCase()))].filter(x => !/^\d/.test(x));
+  const cas = [...new Set([...text.matchAll(CA_RE)].map(m => m[1]))].filter(a => a.startsWith('0x') || /\d/.test(a));
+  const crypto = CRYPTO_RE.test(text) || tickers.length > 0 || cas.length > 0;
+  let s = { mega: 45, major: 25, big: 12, small: 5 }[tier];
+  s += clamp(Math.log10(likesPerMin + 1) * 15, 0, 30);
+  if (crypto) s += 15;
+  if (cas.length) s += 10;
+  if (tickers.length) s += 5;
+  // Mega accounts can start a meme run with any post (a dog pic, a word), so they rank high regardless.
+  if (tier === 'mega' && !t.isRetweet) s += 10;
+  const score = Math.round(clamp(s));
+  return { score, tier, likesPerMin, tickers, cas, crypto, big: score >= 70 };
+}
+
+function linkify(text, sc) {
+  let h = esc(text);
+  h = h.replace(/\$([A-Za-z][A-Za-z0-9]{1,9})\b/g, (m, t) => `<a href="#" class="chip" onclick="lookupCoin('$${t}');return false">$${t}</a>`);
+  for (const ca of sc.cas) h = h.split(ca).join(`<a href="#" class="chip" onclick="lookupCoin('${ca}');return false">${short(ca)} <i class="ic ic-search"></i></a>`);
+  h = h.replace(/(https?:\/\/t\.co\/\w+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  return h.replace(/\n/g, '<br>');
+}
+window.lookupCoin = q => {
+  document.querySelector('nav button[data-p=scanner]').click();
+  $('#search').value = q; searchCA(q.replace(/^\$/, ''));
+};
+
+function tweetHtml(t, big) {
+  const sc = t._s, a = t.author || {};
+  const tierBadge = { mega: ['<i class="ic ic-crown"></i> MEGA', 'var(--red)'], major: ['<i class="ic ic-star"></i> MAJOR', 'var(--amber)'], big: ['BIG', 'var(--accent)'], small: ['', 'var(--dim)'] }[sc.tier];
+  const kfmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n || 0;
+  return `<div class="card" style="margin-bottom:10px;${big ? 'border-color:var(--red);background:linear-gradient(180deg,#22121a,var(--card))' : ''}">
+    <div class="top">
+      <img src="${esc(a.profilePicture || '')}" onerror="this.style.visibility='hidden'" alt="" style="border-radius:50%">
+      <div><div class="name">${esc(a.name)} ${a.isBlueVerified ? '<i class="ic ic-check" style="color:#1d9bf0"></i>' : ''}</div><div class="sub">@${esc(a.userName)} · ${kfmt(a.followers)} followers · ${ageStr(Date.now() - new Date(t.createdAt))} ago${t.isRetweet ? ' · <i class="ic ic-repeat"></i> repost' : ''}${t.isQuote ? ' · <i class="ic ic-msg"></i> quote' : ''}</div></div>
+      ${tierBadge[0] ? `<span class="badge" style="background:color-mix(in srgb, ${tierBadge[1]} 18%, transparent);color:${tierBadge[1]}">${tierBadge[0]}</span>` : ''}
+    </div>
+    <div style="font-size:${big ? 16 : 14}px;line-height:1.5">${linkify(t.text, sc)}</div>
+    <div class="bars"><span>Impact</span><div class="bar"><i style="width:${sc.score}%;background:${sc.big ? 'var(--red)' : 'var(--accent)'}"></i></div><b>${sc.score}</b></div>
+    <div class="links">
+      <span class="sub"><i class="ic ic-heart"></i> ${kfmt(t.likeCount)} &nbsp; <i class="ic ic-repeat"></i> ${kfmt(t.retweetCount)} &nbsp; <i class="ic ic-eye"></i> ${kfmt(t.viewCount)} · ${sc.likesPerMin.toFixed(0)} likes/min</span>
+      <a href="${esc(t.url)}" target="_blank" rel="noopener" style="margin-left:auto">Open on X</a>
+    </div>
+  </div>`;
+}
+
+function renderX() {
+  const all = [...xTweets.values()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const day = Date.now() - 864e5;
+  const big = all.filter(t => t._s.big && new Date(t.createdAt) > day);
+  $('#bigMoves').innerHTML = big.length ? big.slice(0, 10).map(t => tweetHtml(t, true)).join('') : '<p class="legend">Nothing big yet. Posts from mega accounts (10M+ followers) about anything crypto or meme, or any tracked post going viral fast, get pinned here and trigger an alert.</p>';
+  const q = $('#xFilter').value.trim().toLowerCase(), cOnly = $('#xCryptoOnly').checked;
+  const list = all.filter(t => (!cOnly || t._s.crypto) && (!q || (t.text + ' @' + t.author?.userName).toLowerCase().includes(q)));
+  if (!xKey()) return;
+  $('#xFeed').innerHTML = list.length ? list.slice(0, 150).map(t => tweetHtml(t, false)).join('') : '<div class="empty">No posts yet from your tracked accounts. New ones appear on the next check.</div>';
+}
+$('#xFilter').oninput = renderX; $('#xCryptoOnly').onchange = renderX;
+
+const xProv = () => store('mr_xprov') || 'x';
+// Official X API v2 doesn't support cashtag search on every plan, so its discovery query is keyword-only.
+const DISCOVER_QUERY_V2 = '(memecoin OR memecoins OR "pump.fun" OR pumpfun OR "meme coin" OR "new coin" OR 100x OR 1000x OR aped OR "ape in" OR "solana meme") -is:reply';
+
+async function xSearch(query, cursor = '') {
+  return xProv() === 'x' ? xSearchV2(query, cursor) : xSearchTapi(query, cursor);
+}
+
+async function xSearchTapi(query, cursor) {
+  const r = await fetch(`/x/search?query=${encodeURIComponent(query)}&queryType=Latest&cursor=${encodeURIComponent(cursor)}`, { headers: { 'X-API-Key': xKey() } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.message || j.msg || j.error || ('HTTP ' + r.status));
+  return j;
+}
+
+// Translate our query format to X API v2 and normalize the response to the same tweet shape.
+async function xSearchV2(query, cursor) {
+  let since = null;
+  let q = query.replace(/\s*since_time:(\d+)/, (m, s) => { since = +s; return ''; })
+    .replace('-filter:replies', '-is:reply');
+  if (q.startsWith('(memecoin OR memecoins OR "pump.fun"')) q = DISCOVER_QUERY_V2;
+  const params = new URLSearchParams({
+    query: q, max_results: '100', sort_order: 'recency',
+    expansions: 'author_id',
+    'tweet.fields': 'created_at,public_metrics,referenced_tweets',
+    'user.fields': 'name,username,public_metrics,profile_image_url,verified',
+  });
+  // v2 only searches the last 7 days, and start_time must be at least 10s in the past
+  if (since) params.set('start_time', new Date(Math.max(since * 1000, Date.now() - 6.9 * 864e5)).toISOString().replace(/\.\d+Z$/, 'Z'));
+  if (cursor) params.set('next_token', cursor);
+  const tok = xKey().replace(/^Bearer\s+/i, '');
+  const r = await fetch(`/x/v2search?${params}`, { headers: { Authorization: 'Bearer ' + decodeURIComponent(tok) } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || j.title || j.errors?.[0]?.message || j.error || ('HTTP ' + r.status));
+  const users = Object.fromEntries((j.includes?.users || []).map(u => [u.id, u]));
+  const tweets = (j.data || []).map(t => {
+    const u = users[t.author_id] || {}, m = t.public_metrics || {}, refs = (t.referenced_tweets || []).map(x => x.type);
+    return {
+      id: t.id, text: t.text, createdAt: t.created_at,
+      url: `https://x.com/${u.username || 'i'}/status/${t.id}`,
+      likeCount: m.like_count, retweetCount: m.retweet_count, replyCount: m.reply_count, viewCount: m.impression_count,
+      isRetweet: refs.includes('retweeted'), isQuote: refs.includes('quoted'),
+      author: { userName: u.username, name: u.name, followers: u.public_metrics?.followers_count || 0, profilePicture: u.profile_image_url, isBlueVerified: !!u.verified },
+    };
+  });
+  return { tweets, has_next_page: !!j.meta?.next_token, next_cursor: j.meta?.next_token || '' };
+}
+
+async function pollX() {
+  if (!xKey() || xPaused) return;
+  const startedAt = Date.now();
+  const firstSince = Math.floor((Date.now() - 3 * 36e5) / 1000);
+  $('#xStatus').textContent = 'checking X…';
+  let fresh = 0, err = null, discovered = 0;
+
+  // 1) whole-X discovery search + 2) a rotating slice of tracked accounts
+  const jobs = [];
+  if (discoverOn()) jobs.push({ key: '__discover', base: DISCOVER_QUERY, discover: true, maxPages: 2 });
+  const chunks = chunkQueries(getHandles());
+  for (let i = 0; i < Math.min(chunks.length, CHUNKS_PER_CHECK); i++) {
+    const base = chunks[(rotation + i) % chunks.length];
+    jobs.push({ key: base, base, maxPages: 2 });
+  }
+  rotation = chunks.length ? (rotation + CHUNKS_PER_CHECK) % chunks.length : 0;
+
+  for (const job of jobs) {
+    try {
+      const since = Math.floor((chunkSince[job.key] ? chunkSince[job.key] - 60e3 : firstSince * 1000) / 1000);
+      let cursor = '', pages = 0;
+      do {
+        const j = await xSearch(`${job.base} since_time:${since}`, cursor);
+        for (const t of j.tweets || []) {
+          if (xTweets.has(t.id)) continue;
+          if (job.discover) {
+            if ((t.author?.followers || 0) < DISCOVER_MIN_FOLLOWERS) continue;
+            const h = getHandles();
+            if (h.length < MAX_X && !h.some(x => x.toLowerCase() === t.author.userName.toLowerCase())) {
+              store('mr_xaccounts', [...h, t.author.userName]); discovered++;
+            }
+          }
+          t._s = scoreTweet(t); xTweets.set(t.id, t); fresh++;
+          if (t._s.big && !xAlerted.has(t.id) && xLastPoll) {
+            xAlerted.add(t.id);
+            xBigUnseen++; drawBigCount();
+            showAlert(`<i class="ic ic-siren"></i> BIG MOVE: @${esc(t.author?.userName)} posted: “${esc((t.text || '').slice(0, 120))}” <a href="${esc(t.url)}" target="_blank" rel="noopener">open</a>`);
+            notify(`@${t.author?.userName} just posted`, (t.text || '').slice(0, 140));
+            beep();
+          } else if (t._s.big) xAlerted.add(t.id);
+        }
+        cursor = j.has_next_page ? j.next_cursor : '';
+      } while (cursor && ++pages < job.maxPages);
+      chunkSince[job.key] = startedAt;
+    } catch (e) { err = e.message; }
+  }
+  if (discovered) { drawHandles(); xCostEstimate(); }
+  xLastPoll = startedAt;
+  store('mr_xalerted', [...xAlerted].slice(-500));
+  // keep memory bounded
+  if (xTweets.size > 600) [...xTweets.values()].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).slice(0, xTweets.size - 600).forEach(t => xTweets.delete(t.id));
+  store('mr_xcache', [...xTweets.values()].slice(-300));
+  $('#xStatus').innerHTML = err ? `<span class="down">X error: ${esc(err)}</span>` : `${fresh} new post${fresh === 1 ? '' : 's'}${discovered ? ` · auto-added ${discovered} account${discovered === 1 ? '' : 's'}` : ''} · checked ${new Date().toLocaleTimeString()}`;
+  drawXKey(err);
+  renderX();
+}
+
+function drawBigCount() { const el = $('#bigCount'); el.style.display = xBigUnseen ? 'inline' : 'none'; el.textContent = xBigUnseen; }
+function drawXKey(err) {
+  $('#xKeyStatus').innerHTML = !xKey() ? '<b style="color:var(--amber)">No key yet. Feed is off.</b>' : err ? `<b class="down">Key problem: ${esc(err)}</b>` : '<b class="up">✓ Key saved. Feed is live.</b>';
+}
+function scheduleX() { clearInterval(xTimer); xTimer = setInterval(pollX, +$('#xInterval').value * 1000); xCostEstimate(); }
+$('#xSaveKey').onclick = () => { const k = $('#xKey').value.trim(); store('mr_xkey', k || null); $('#xKey').value = ''; xLastPoll = 0; drawXKey(); pollX(); };
+$('#xInterval').onchange = () => { store('mr_xint', $('#xInterval').value); scheduleX(); };
+$('#xPause').onclick = () => { xPaused = !xPaused; $('#xPause').textContent = xPaused ? 'Resume' : 'Pause'; if (!xPaused) pollX(); };
+
+// shared alert helpers
+function showAlert(html) {
+  $('#alertBar').style.display = 'block';
+  $('#alertBar').innerHTML = html + ` <button class="ghost" style="margin-left:10px;padding:2px 8px" onclick="this.parentNode.style.display='none'">dismiss</button>`;
+}
+function beep() {
+  try { const c = new AudioContext(), o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = 0.15; o.start(); o.stop(c.currentTime + 0.25); } catch {}
+}
+
+// ======================================================================
+// TRADE ALERTS (take-profit / stop-loss)
+// ======================================================================
+const getTrades = () => store('mr_trades') || [];
+const setTrades = t => { store('mr_trades', t); drawTrades(); };
+const tradeLive = {};   // mint -> {mcap, sym, url}
+
+async function addTrade() {
+  const ca = $('#tCA').value.trim();
+  if (!isAddr(ca) && !/^0x[a-fA-F0-9]{40}$/.test(ca)) { alert('Paste the coin\'s contract address.'); return; }
+  const best = await loadPairs([{ chainId: 'solana', tokenAddress: ca }]);
+  const p = best['solana:' + ca];
+  if (!p) {
+    // Common mix-up: a wallet address pasted into the coin box. Move it to the wallet box and load it.
+    if (isAddr(ca)) {
+      $('#tCA').value = ''; $('#myAddr').value = ca; loadMine();
+      alert('No coin has that address. It looks like a wallet address, so it was moved to the wallet box below and your positions are loading.\n\nThis top box is for a COIN\'s contract address (to set a sell alert).');
+      return;
+    }
+    alert('Couldn\'t find live market data for that coin yet (very new coins can take a minute to show up).'); return;
+  }
+  const entry = parseFloat($('#tEntry').value.replace(/[$,]/g, '').replace(/k$/i, 'e3').replace(/m$/i, 'e6')) || p.marketCap || p.fdv;
+  setTrades([...getTrades().filter(t => t.mint !== ca), { mint: ca, sym: p.baseToken.symbol, entry, tp: +$('#tTP').value, sl: +$('#tSL').value, hit: null, added: Date.now() }]);
+  $('#tCA').value = $('#tEntry').value = '';
+  pollTrades();
+}
+$('#tAdd').onclick = addTrade;
+window.removeTrade = mint => setTrades(getTrades().filter(t => t.mint !== mint));
+window.watchCoin = ca => { document.querySelector('nav button[data-p=mine]').click(); $('#tCA').value = ca; $('#tEntry').focus(); };
+
+async function pollTrades() {
+  const trades = getTrades(); if (!trades.length) return;
+  const best = await loadPairs(trades.map(t => ({ chainId: 'solana', tokenAddress: t.mint })));
+  let changed = false;
+  for (const t of trades) {
+    const p = best['solana:' + t.mint]; if (!p) continue;
+    const mcap = p.marketCap || p.fdv;
+    tradeLive[t.mint] = { mcap, url: p.url };
+    const x = mcap / t.entry;
+    if (!t.hit && x >= t.tp) {
+      t.hit = 'tp'; changed = true;
+      showAlert(`<i class="ic ic-target"></i> $${esc(t.sym)} hit ${t.tp}x (${fmt(mcap)} market cap)! Your sell target. <a href="${esc(p.url)}" target="_blank" rel="noopener">chart</a>`);
+      notify(`$${t.sym} hit ${t.tp}x!`, `Market cap ${fmt(mcap)}. This is the target you set.`); beep(); setTimeout(beep, 350);
+    } else if (!t.hit && t.sl && x <= 1 - t.sl / 100) {
+      t.hit = 'sl'; changed = true;
+      showAlert(`<i class="ic ic-stop"></i> $${esc(t.sym)} hit your −${t.sl}% stop (${fmt(mcap)} market cap). <a href="${esc(p.url)}" target="_blank" rel="noopener">chart</a>`);
+      notify(`$${t.sym} hit your stop-loss`, `Down ${Math.round((1 - x) * 100)}%. Market cap ${fmt(mcap)}.`); beep();
+    }
+  }
+  if (changed) store('mr_trades', trades);
+  drawTrades();
+}
+
+function drawTrades() {
+  const trades = getTrades();
+  if (!trades.length) { $('#tList').innerHTML = '<p class="legend">Add a coin you bought. Lunex checks it every 15 seconds and alerts you (banner + sound + desktop notification) the moment it hits your target or your stop. Turn on alerts at the top.</p>'; return; }
+  $('#tList').innerHTML = `<table><tr><th>Coin</th><th>Entry MC</th><th>Now</th><th>Multiple</th><th>Target / Stop</th><th>Status</th><th></th></tr>${trades.map(t => {
+    const live = tradeLive[t.mint], x = live ? live.mcap / t.entry : null;
+    const status = t.hit === 'tp' ? '<b class="up"><i class="ic ic-target"></i> TARGET HIT</b>' : t.hit === 'sl' ? '<b class="down"><i class="ic ic-stop"></i> STOP HIT</b>' : '<span class="sub">watching…</span>';
+    return `<tr><td><b>${live ? `<a href="${esc(live.url)}" target="_blank" rel="noopener">$${esc(t.sym)}</a>` : '$' + esc(t.sym)}</b></td><td>${fmt(t.entry)}</td><td>${live ? fmt(live.mcap) : '…'}</td>
+      <td class="${x >= 1 ? 'up' : 'down'}"><b>${x ? x.toFixed(2) + 'x' : '…'}</b></td>
+      <td>${fmt(t.entry * t.tp)} / ${t.sl ? fmt(t.entry * (1 - t.sl / 100)) : 'n/a'}</td><td>${status}</td>
+      <td><button class="ghost" style="padding:2px 8px" onclick="removeTrade('${esc(t.mint)}')">✕</button></td></tr>`;
+  }).join('')}</table>`;
+}
+
+$('#refresh').onclick = () => { $('#search').value = ''; scan(); };
+$('#chain').onchange = scan;
+$('#sort').onchange = renderScanner;
+$('#search').onkeydown = e => { if (e.key === 'Enter') { const q = e.target.value.trim(); q ? searchCA(q) : scan(); } };
+
+// ======================================================================
+// PUMP.FUN LIVE (PumpPortal websocket)
+// ======================================================================
+const MAX_TRACK = 60;
+const coins = new Map();          // mint -> coin state
+let launches = 0, ws, wsReady = false;
+
+function newCoin(m) {
+  return {
+    mint: m.mint, name: m.name, symbol: m.symbol, uri: m.uri, creator: m.traderPublicKey,
+    created: Date.now(), devBuySol: m.solAmount || 0, startMcap: m.marketCapSol || 0, mcap: m.marketCapSol || 0,
+    peak: m.marketCapSol || 0, buys: 0, sells: 0, buyers: new Set(), volSol: 0, devSold: false,
+    smart: new Set(), meta: null,
+  };
+}
+
+async function loadMeta(c) {
+  if (!c.uri) return;
+  try {
+    const ctl = new AbortController(); setTimeout(() => ctl.abort(), 6000);
+    const r = await fetch(c.uri, { signal: ctl.signal });
+    c.meta = await r.json();
+    dirty = true;
+  } catch { c.meta = { failed: true }; }
+}
+
+function pumpScore(c) {
+  const flags = [];
+  const trades = c.buys + c.sells;
+  const ratio = trades ? c.buys / trades : 0.5;
+  let s = 0;
+  const uniq = tradeStream ? c.buyers.size : Math.round(c.buys * 0.7);   // polling can't see unique wallets; estimate
+  s += Math.min(uniq * 1.5, 30);
+  s += clamp((ratio - 0.4) / 0.3 * 15, 0, 15);
+  s += clamp(Math.log10(c.volSol + 1) * 14, 0, 25);
+  s += clamp((c.mcap / (c.startMcap || 1) - 1) * 8, 0, 15);
+  s += Math.min(c.smart.size * 10, 20);
+  if (c.smart.size) flags.push({ t: `${c.smart.size} smart wallet${c.smart.size > 1 ? 's' : ''} bought`, k: 'gold' });
+  if (c.devSold) { s = Math.min(s, 5); flags.push({ t: 'Dev sold' }); }
+  if (c.devBuySol >= 3) { s -= 10; flags.push({ t: `Dev bought ${c.devBuySol.toFixed(1)} SOL at launch` }); }
+  if (c.peak > c.startMcap * 1.5 && c.mcap < c.peak * 0.5) { s -= 15; flags.push({ t: 'Down 50%+ from peak' }); }
+  if (c.meta && !c.meta.failed) {
+    const soc = ['twitter', 'telegram', 'website'].filter(k => c.meta[k]);
+    if (!soc.length) { s -= 8; flags.push({ t: 'No socials' }); }
+  }
+  if (tradeStream && trades > 10 && c.buyers.size < 4) { s -= 15; flags.push({ t: 'Few unique buyers (bot/bundle?)' }); }
+  const age = Date.now() - c.created;
+  if (age > 5 * 60e3 && trades < 5) flags.push({ t: 'No interest' });
+  const score = Math.round(clamp(s));
+  const dead = c.devSold || (age > 5 * 60e3 && trades < 5);
+  let label, color;
+  if (c.devSold) { label = '<i class="ic ic-flag"></i> Rug signal'; color = 'var(--red)'; }
+  else if (score >= 60) { label = '<i class="ic ic-flame"></i> Strong start'; color = 'var(--green)'; }
+  else if (score >= 35) { label = '<i class="ic ic-eye"></i> Some traction'; color = 'var(--accent)'; }
+  else { label = '<i class="ic ic-snow"></i> Quiet'; color = 'var(--dim)'; }
+  return { score, flags, label, color, ratio, dead };
+}
+
+// Real-time trade streams need a funded PumpPortal API key. Without one we fall back to polling.
+let tradeStream = !!store('mr_ppkey');
+function connectWS() {
+  const key = store('mr_ppkey');
+  tradeStream = !!key;
+  ws = new WebSocket('wss://pumpportal.fun/api/data' + (key ? '?api-key=' + encodeURIComponent(key) : ''));
+  ws.onopen = () => {
+    wsReady = true;
+    ws.send(JSON.stringify({ method: 'subscribeNewToken' }));
+    if (tradeStream && coins.size) ws.send(JSON.stringify({ method: 'subscribeTokenTrade', keys: [...coins.keys()] }));
+    const w = getWallets().map(x => x.addr);
+    if (tradeStream && w.length) ws.send(JSON.stringify({ method: 'subscribeAccountTrade', keys: w }));
+    setStatus();
+  };
+  ws.onclose = () => { wsReady = false; setStatus(); setTimeout(connectWS, 3000); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (!m.txType) {
+      if (m.message && /API key/i.test(m.message)) { tradeStream = false; drawKeyStatus(); }
+      return;
+    }
+    if (m.txType === 'create') onCreate(m);
+    else onTrade(m);
+  };
+}
+const send = o => wsReady && tradeStream && ws.send(JSON.stringify(o));
+
+// Fallback: refresh tracked pump.fun coins from DexScreener
+async function pollPumpCoins() {
+  if (tradeStream || !coins.size) return;
+  const best = await loadPairs([...coins.keys()].map(m => ({ chainId: 'solana', tokenAddress: m })));
+  for (const c of coins.values()) {
+    const p = best['solana:' + c.mint]; if (!p) continue;
+    const t = p.txns?.h1 || {};
+    c.buys = t.buys || 0; c.sells = t.sells || 0;
+    if (solUsd) {
+      c.volSol = (p.volume?.h1 || 0) / solUsd;
+      if (p.marketCap) { c.mcap = p.marketCap / solUsd; c.peak = Math.max(c.peak, c.mcap); }
+    }
+  }
+  dirty = true;
+}
+
+// Fallback: read tracked wallets' recent transactions straight from the chain
+const lastSig = {};
+const WSKIP = new Set([SOL_MINT, 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB']);
+function parseSwap(tx, owner) {
+  if (!tx || tx.meta?.err) return null;
+  const pre = {}, post = {};
+  for (const b of tx.meta.preTokenBalances || []) if (b.owner === owner) pre[b.mint] = +b.uiTokenAmount.uiAmount || 0;
+  for (const b of tx.meta.postTokenBalances || []) if (b.owner === owner) post[b.mint] = +b.uiTokenAmount.uiAmount || 0;
+  const keys = tx.transaction.message.accountKeys.map(k => k.pubkey || k);
+  const i = keys.indexOf(owner);
+  const solDelta = i >= 0 ? (tx.meta.postBalances[i] - tx.meta.preBalances[i]) / 1e9 : 0;
+  const wsolDelta = (post[SOL_MINT] || 0) - (pre[SOL_MINT] || 0);
+  let best = null;
+  for (const m of new Set([...Object.keys(pre), ...Object.keys(post)])) {
+    if (WSKIP.has(m)) continue;
+    const d = (post[m] || 0) - (pre[m] || 0);
+    if (d && (!best || Math.abs(d) > Math.abs(best.d))) best = { m, d };
+  }
+  if (!best) return null;
+  // dollars spent/received as USDC/USDT in the same transaction (pump.fun can settle in stables)
+  const STABLES = ['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'];
+  const stableDelta = STABLES.reduce((s, m) => s + ((post[m] || 0) - (pre[m] || 0)), 0);
+  // a first buy also pays ~0.00204 SOL rent to open the token account; it's a refundable deposit, not cost
+  const created = best.d > 0 && !(best.m in pre);
+  const solAmount = Math.max(0, Math.abs(solDelta + wsolDelta) - (created ? 0.00204 : 0));
+  return { mint: best.m, txType: best.d > 0 ? 'buy' : 'sell', solAmount, stableAmount: Math.abs(stableDelta), tokenAmount: Math.abs(best.d), opened: best.d > 0 && !pre[best.m] };
+}
+let polling = false;
+async function pollWallets() {
+  if (tradeStream || polling) return;
+  polling = true;
+  try {
+    for (const w of getWallets()) {
+      try {
+        const first = !(w.addr in lastSig);
+        const sigs = await rpc('getSignaturesForAddress', [w.addr, { limit: 10 }]);
+        const fresh = [];
+        for (const s of sigs) { if (s.signature === lastSig[w.addr]) break; if (!s.err) fresh.push(s); }
+        if (sigs[0]) lastSig[w.addr] = sigs[0].signature;
+        for (const s of fresh.reverse()) {
+          const tx = await rpc('getTransaction', [s.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 1 }]);
+          const t = parseSwap(tx, w.addr);
+          if (t) await onSmartTrade({ ...t, signature: s.signature, traderPublicKey: w.addr }, w, { silent: first, time: (s.blockTime || 0) * 1000 || Date.now() });
+        }
+      } catch {}
+    }
+  } finally { polling = false; }
+}
+
+function onCreate(m) {
+  launches++;
+  if (coins.has(m.mint)) return;
+  const c = newCoin(m);
+  coins.set(m.mint, c);
+  loadMeta(c);
+  send({ method: 'subscribeTokenTrade', keys: [m.mint] });
+  if (coins.size > MAX_TRACK) {
+    // evict the oldest coin that smart money hasn't touched
+    const victim = [...coins.values()].filter(x => !x.smart.size).sort((a, b) => a.created - b.created)[0];
+    if (victim) { coins.delete(victim.mint); send({ method: 'unsubscribeTokenTrade', keys: [victim.mint] }); }
+  }
+  dirty = true;
+}
+
+function onTrade(m) {
+  const wallet = walletMap()[m.traderPublicKey];
+  if (wallet) onSmartTrade(m, wallet);
+  const c = coins.get(m.mint);
+  if (!c) return;
+  if (m.txType === 'buy') { c.buys++; c.buyers.add(m.traderPublicKey); }
+  else if (m.txType === 'sell') { c.sells++; if (m.traderPublicKey === c.creator) c.devSold = true; }
+  c.volSol += m.solAmount || 0;
+  if (m.marketCapSol) { c.mcap = m.marketCapSol; c.peak = Math.max(c.peak, c.mcap); }
+  if (wallet && m.txType === 'buy') c.smart.add(wallet.addr);
+  dirty = true;
+}
+
+function renderPump() {
+  const sort = $('#pumpSort').value, hide = $('#hideDead').checked;
+  let list = [...coins.values()].map(c => ({ c, s: pumpScore(c) }));
+  if (hide) list = list.filter(x => !x.s.dead);
+  list.sort((a, b) => sort === 'new' ? b.c.created - a.c.created : sort === 'mcap' ? b.c.mcap - a.c.mcap : b.s.score - a.s.score);
+  $('#pumpStats').innerHTML = `${launches} launches seen · tracking ${coins.size} · ${tradeStream ? '<b class="up"><i class="ic ic-zap"></i> real-time trades</b>' : '<b style="color:var(--amber)">basic mode: trades refresh every 15s, no dev-sell detection</b> (add a PumpPortal key in Smart Wallets for real-time)'}`;
+  if (!list.length) { $('#pumpGrid').innerHTML = '<div class="empty">Waiting for the next launch…</div>'; return; }
+  $('#pumpGrid').innerHTML = list.map(({ c, s }) => {
+    const img = c.meta?.image ? esc(c.meta.image) : '';
+    const usd = v => solUsd ? fmt(v * solUsd) : v.toFixed(1) + ' SOL';
+    const socials = c.meta ? ['twitter', 'telegram', 'website'].filter(k => c.meta[k] && /^https?:\/\//.test(c.meta[k]))
+      .map(k => `<a href="${esc(c.meta[k])}" target="_blank" rel="noopener">${k === 'twitter' ? 'X' : k === 'telegram' ? '<i class="ic ic-send"></i> TG' : '<i class="ic ic-globe"></i> Site'}</a>`).join('') : '';
+    const flagHtml = s.flags.length ? s.flags.map(f => `<span class="flag ${f.k || ''}">${esc(f.t)}</span>`).join('') : '<span class="flag ok">No red flags yet</span>';
+    return `<div class="card ${c.smart.size ? 'smart' : ''} ${s.dead ? 'dead' : ''}">
+      <div class="top">
+        <img src="${img}" onerror="this.style.visibility='hidden'" alt="">
+        <div><div class="name">$${esc(c.symbol)}</div><div class="sub">${esc(c.name)} · ${ageStr(Date.now() - c.created)} old</div></div>
+        <span class="badge" style="background:color-mix(in srgb, ${s.color} 18%, transparent);color:${s.color}">${s.label}</span>
+      </div>
+      <div class="bars"><span>Early signal</span><div class="bar"><i style="width:${s.score}%;background:var(--green)"></i></div><b>${s.score}</b></div>
+      <div class="stats">
+        <div class="stat"><small>Mkt cap</small><b>${usd(c.mcap)}</b></div>
+        <div class="stat"><small>Vol</small><b>${c.volSol.toFixed(1)} SOL</b></div>
+        <div class="stat"><small>Buyers</small><b>${tradeStream ? c.buyers.size : '~' + Math.round(c.buys * 0.7)}</b></div>
+        <div class="stat"><small>Buy/Sell</small><b>${c.buys}/${c.sells}</b></div>
+      </div>
+      <div class="flags">${flagHtml}</div>
+      <div class="links">
+        <a href="https://pump.fun/coin/${esc(c.mint)}" target="_blank" rel="noopener"><i class="ic ic-pill"></i> pump.fun</a>
+        <a href="https://dexscreener.com/solana/${esc(c.mint)}" target="_blank" rel="noopener"><i class="ic ic-chart"></i> Chart</a>
+        ${socials}
+        <a href="#" onclick="navigator.clipboard.writeText('${esc(c.mint)}');this.textContent='Copied';return false"><i class="ic ic-copy"></i> CA</a>
+        <a href="#" onclick="watchCoin('${esc(c.mint)}');return false"><i class="ic ic-target"></i> Set alert</a>
+      </div>
+    </div>`;
+  }).join('');
+}
+$('#pumpSort').onchange = () => dirty = true;
+$('#hideDead').onchange = () => dirty = true;
+
+// ======================================================================
+// SMART WALLETS
+// ======================================================================
+const getWallets = () => store('mr_wallets') || [];
+const walletMap = () => Object.fromEntries(getWallets().map(w => [w.addr, w]));
+const smartTrades = [];                 // recent trades by tracked wallets
+const convergence = new Map();          // mint -> {buyers: Map(addr->time), symbol}
+let smartUnseen = 0;
+
+function drawWallets() {
+  const w = getWallets();
+  $('#walletList').innerHTML = w.length ? w.map((x, i) => `<div class="handle"><a href="https://solscan.io/account/${esc(x.addr)}" target="_blank" rel="noopener"><b>${esc(x.name)}</b> <span class="sub">${short(x.addr)}</span></a><button onclick="removeWallet(${i})">✕</button></div>`).join('') : '<p class="legend">No wallets tracked yet.</p>';
+}
+$('#addWallet').onclick = () => {
+  const addr = $('#wAddr').value.trim(), name = $('#wName').value.trim() || short(addr);
+  if (!isAddr(addr)) { alert('That doesn\'t look like a Solana wallet address.'); return; }
+  if (getWallets().some(x => x.addr === addr)) return;
+  store('mr_wallets', [...getWallets(), { addr, name }]);
+  send({ method: 'subscribeAccountTrade', keys: [addr] });
+  $('#wAddr').value = $('#wName').value = '';
+  drawWallets();
+};
+window.removeWallet = i => {
+  const w = getWallets(); const [gone] = w.splice(i, 1); store('mr_wallets', w);
+  send({ method: 'unsubscribeAccountTrade', keys: [gone.addr] });
+  drawWallets();
+};
+
+async function symbolFor(mint) {
+  const c = coins.get(mint); if (c) return c.symbol;
+  try { const p = await getJSON(`${API}/tokens/v1/solana/${mint}`); return p[0]?.baseToken?.symbol || short(mint); } catch { return short(mint); }
+}
+
+const seenSigs = new Set();
+async function onSmartTrade(m, wallet, opts = {}) {
+  if (m.signature) { if (seenSigs.has(m.signature)) return; seenSigs.add(m.signature); }
+  const time = opts.time || Date.now();
+  const t = { ...m, wallet, time, symbol: await symbolFor(m.mint) };
+  smartTrades.push(t); smartTrades.sort((a, b) => b.time - a.time); smartTrades.length = Math.min(smartTrades.length, 150);
+  if (!opts.silent) { smartUnseen++; drawSmartCount(); }
+  const coin = coins.get(m.mint);
+  if (coin && m.txType === 'buy') { coin.smart.add(wallet.addr); dirty = true; }
+  if (m.txType === 'buy') {
+    const cv = convergence.get(m.mint) || { buyers: new Map(), symbol: t.symbol };
+    cv.buyers.set(wallet.addr, time);
+    convergence.set(m.mint, cv);
+    const recent = [...cv.buyers.entries()].filter(([, ts]) => Date.now() - ts < 30 * 60e3);
+    if (opts.silent) { /* history load: no alerts */ }
+    else if (recent.length >= 2) {
+      const names = recent.map(([a]) => walletMap()[a]?.name || short(a)).join(', ');
+      $('#alertBar').style.display = 'block';
+      $('#alertBar').innerHTML = `<i class="ic ic-network"></i> ${recent.length} tracked wallets bought <a href="https://dexscreener.com/solana/${esc(m.mint)}" target="_blank" rel="noopener">$${esc(t.symbol)}</a>: ${esc(names)} <button class="ghost" style="margin-left:10px;padding:2px 8px" onclick="this.parentNode.style.display='none'">dismiss</button>`;
+      notify(`Smart money convergence: $${t.symbol}`, `${names} all bought in the last 30 min`);
+    } else {
+      notify(`${wallet.name} bought $${t.symbol}`, `${(m.solAmount || 0).toFixed(2)} SOL`);
+    }
+  }
+  drawSmart();
+}
+function drawSmartCount() { const el = $('#smartCount'); el.style.display = smartUnseen ? 'inline' : 'none'; el.textContent = smartUnseen; }
+
+function drawSmart() {
+  const cv = [...convergence.entries()].map(([mint, v]) => ({ mint, ...v, recent: [...v.buyers.entries()].filter(([, ts]) => Date.now() - ts < 30 * 60e3) }))
+    .filter(x => x.recent.length >= 2).sort((a, b) => b.recent.length - a.recent.length);
+  $('#convergence').innerHTML = cv.length ? `<table><tr><th>Coin</th><th>Wallets</th><th>Who</th><th></th></tr>${cv.map(x => `<tr><td><b>$${esc(x.symbol)}</b></td><td>${x.recent.length}</td><td>${esc(x.recent.map(([a]) => walletMap()[a]?.name || short(a)).join(', '))}</td><td><a href="https://dexscreener.com/solana/${esc(x.mint)}" target="_blank" rel="noopener">chart</a> · <a href="https://pump.fun/coin/${esc(x.mint)}" target="_blank" rel="noopener">pump</a></td></tr>`).join('')}</table>` : '<p class="legend">Nothing yet. This fills in when two or more wallets you track buy the same coin.</p>';
+  if (!smartTrades.length) return;
+  $('#smartFeed').innerHTML = `<table><tr><th>When</th><th>Wallet</th><th>Side</th><th>Coin</th><th>SOL</th><th>MC</th></tr>${smartTrades.map(t => `<tr>
+    <td>${ageStr(Date.now() - t.time)} ago</td><td>${esc(t.wallet.name)}</td>
+    <td class="${t.txType === 'buy' ? 'buy' : 'sell'}">${t.txType.toUpperCase()}</td>
+    <td><a href="https://dexscreener.com/solana/${esc(t.mint)}" target="_blank" rel="noopener">$${esc(t.symbol)}</a></td>
+    <td>${(t.solAmount || 0).toFixed(2)}</td><td>${t.marketCapSol && solUsd ? fmt(t.marketCapSol * solUsd) : 'n/a'}</td></tr>`).join('')}</table>`;
+}
+
+// ======================================================================
+// MY WALLET
+// ======================================================================
+async function rpc(method, params) {
+  const r = await fetch('/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+  const j = await r.json().catch(() => ({ error: { message: 'Local server not running. Start it with: python server.py' } }));
+  if (j.error) throw new Error(j.error.message);
+  return j.result;
+}
+
+function positionSignal(a) {
+  if (a.flags.some(f => /honeypot/i.test(f))) return { t: '<i class="ic ic-flag"></i> Possible honeypot: check if you can sell', c: 'var(--red)' };
+  if (a.c1 < -20 && a.buyRatio < 0.45) return { t: '<i class="ic ic-down"></i> Heavy selling right now', c: 'var(--red)' };
+  if (a.v24 < 1000 && a.age > 864e5) return { t: '<i class="ic ic-skull"></i> Volume has dried up', c: 'var(--dim)' };
+  if (a.momentum >= 60) return { t: '<i class="ic ic-chart"></i> Strong momentum', c: 'var(--green)' };
+  if (a.c6 < -25) return { t: '<i class="ic ic-down"></i> Fading over 6h', c: 'var(--amber)' };
+  return { t: '<i class="ic ic-minus"></i> Holding steady', c: 'var(--accent)' };
+}
+
+// ---------- wallet connect (read-only: we only ever read the public key) ----------
+function walletProvider() {
+  return window.phantom?.solana || window.solflare || window.backpack?.solana || window.backpack || window.solana || null;
+}
+async function connectWallet(silent = false) {
+  const p = walletProvider();
+  if (!p) {
+    if (!silent) $('#mineSummary').innerHTML = `<div class="note warn">No Solana wallet found in this browser. Open Lunex in the browser where you have <b>Phantom</b> (or Solflare/Backpack) installed, the same one you use for pump.fun, at <b>http://localhost:8765</b>. Or just paste your public address.</div>`;
+    return;
+  }
+  try {
+    const res = await p.connect(silent ? { onlyIfTrusted: true } : undefined);
+    const pk = (res?.publicKey || p.publicKey)?.toString();
+    if (!pk) return;
+    $('#myAddr').value = pk;
+    store('mr_connected', true);
+    $('#connectWallet').innerHTML = '<i class="ic ic-check"></i> ' + short(pk);
+    $('#disconnectWallet').style.display = '';
+    loadMine();
+  } catch (e) {
+    if (!silent) $('#mineSummary').innerHTML = `<div class="note warn">Wallet connection was cancelled.</div>`;
+  }
+}
+$('#connectWallet').onclick = () => connectWallet(false);
+$('#disconnectWallet').onclick = async () => {
+  try { await walletProvider()?.disconnect(); } catch {}
+  store('mr_connected', false); store('mr_my', null);
+  $('#myAddr').value = ''; $('#connectWallet').innerHTML = '<i class="ic ic-wallet"></i> Connect wallet'; $('#disconnectWallet').style.display = 'none';
+  $('#mineSummary').innerHTML = ''; $('#mineGrid').innerHTML = '';
+};
+
+// ---------- trade history -> entry price & PnL ----------
+// Reads the wallet's recent transactions and works out how much SOL went into / came out of each token.
+async function tradeHistory(addr, holdings, onProgress) {
+  const sigs = (await rpc('getSignaturesForAddress', [addr, { limit: 150 }])).filter(s => !s.err);
+  const want = new Set(Object.keys(holdings)), book = {};
+  let done = 0;
+  // Newest first. A position is fully traced once we reach the buy that OPENED it (wallet held none before),
+  // so every buy is counted, like pump.fun's average entry. Stopping as soon as recent buys "explain" the
+  // balance skipped older, pricier buys and made losing positions look profitable.
+  const covered = () => [...want].every(m => { const b = book[m]; return b && b.opened && b.tokIn - b.tokOut >= holdings[m] * 0.95; });
+  const worker = async () => {
+    while (sigs.length && !covered()) {
+      const s = sigs.shift();
+      try {
+        const tx = await rpc('getTransaction', [s.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 1 }]);
+        const t = parseSwap(tx, addr);
+        if (t && want.has(t.mint)) {
+          const b = book[t.mint] ||= { solIn: 0, solOut: 0, tokIn: 0, tokOut: 0, buys: 0, sells: 0, first: Infinity, opened: false, buyList: [] };
+          if (t.txType === 'buy') {
+            b.solIn += t.solAmount; b.tokIn += t.tokenAmount; b.buys++; b.first = Math.min(b.first, (s.blockTime || 0) * 1000);
+            b.buyList.push({ t: (s.blockTime || 0) * 1000, sol: t.solAmount, usd: t.stableAmount || 0, tok: t.tokenAmount });
+            if (t.opened) b.opened = true;
+          }
+          else { b.solOut += t.solAmount; b.tokOut += t.tokenAmount; b.sells++; }
+        }
+        onProgress(++done, book);
+      } catch {
+        // rate-limited by the free RPC: put it back and slow down
+        s.tries = (s.tries || 0) + 1;
+        if (s.tries < 4) sigs.unshift(s); else onProgress(++done, book);
+        await new Promise(r => setTimeout(r, 1200 * s.tries));
+      }
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  return { book, total: done };
+}
+
+// SOL/USD history, so each buy is valued at the SOL price when it happened (like pump.fun's "Spent").
+let solHist = null;
+async function loadSolHistory(fromMs) {
+  if (solHist && solHist.from <= fromMs) return solHist;
+  try {
+    const now = Math.floor(Date.now() / 1000), from = Math.floor(fromMs / 1000) - 3600;
+    const j = await (await fetch(`https://api.coingecko.com/api/v3/coins/solana/market_chart/range?vs_currency=usd&from=${from}&to=${now}`)).json();
+    if (j.prices && j.prices.length) solHist = { from: fromMs, pts: j.prices };
+  } catch { }
+  return solHist;
+}
+function solPriceAt(ms) {
+  if (!solHist) return solUsd;
+  let best = solHist.pts[0];
+  for (const p of solHist.pts) { if (Math.abs(p[0] - ms) < Math.abs(best[0] - ms)) best = p; }
+  return best[1] || solUsd;
+}
+
+function positionPlan(r) {
+  const x = r.multiple;
+  if (r.a.flags.some(f => /honeypot/i.test(f))) return { t: '<i class="ic ic-flag"></i> Possible honeypot. Check whether selling works at all before adding more.', c: 'var(--red)' };
+  if (x == null) return { t: 'Entry unknown (the buy is older than the history read). Set an alert by hand with your entry market cap.', c: 'var(--dim)' };
+  if (x >= 2) return { t: `<i class="ic ic-compass"></i> You're at ${x.toFixed(2)}x. Your rule: take your initial out now, and what's left is house money.`, c: 'var(--green)' };
+  if (x >= 1.5) return { t: `<i class="ic ic-compass"></i> ${x.toFixed(2)}x, getting close to your 2x target. Set the alert so you don't miss it.`, c: 'var(--green)' };
+  if (x <= 0.6) return { t: `<i class="ic ic-compass"></i> Down ${Math.round((1 - x) * 100)}%, past a −40% stop. Decide now: cut it, or hold it as a lottery ticket you're fine losing.`, c: 'var(--red)' };
+  if (x < 1) return { t: `<i class="ic ic-compass"></i> Down ${Math.round((1 - x) * 100)}%. Know where your stop is before it gets worse.`, c: 'var(--amber)' };
+  return { t: `<i class="ic ic-compass"></i> Up ${Math.round((x - 1) * 100)}%. Set a 2x alert and let it work.`, c: 'var(--accent)' };
+}
+
+window.autoAlert = (mint, sym, entry) => {
+  setTrades([...getTrades().filter(t => t.mint !== mint), { mint, sym, entry, tp: 2, sl: 40, hit: null, added: Date.now() }]);
+  pollTrades();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+async function loadMine() {
+  const addr = $('#myAddr').value.trim();
+  if (addr.length > 60 || addr.split(/\s+/).length >= 12) {
+    $('#myAddr').value = '';
+    $('#mineSummary').innerHTML = '<div class="note warn"><i class="ic ic-ban"></i> That looks like a <b>private key or seed phrase</b>, not a public address. It was cleared and not saved or sent anywhere. If you\'ve ever pasted it into a site or shared it, move your funds to a new wallet now.</div>';
+    return;
+  }
+  if (!isAddr(addr)) { $('#mineSummary').innerHTML = '<div class="note warn">That isn\'t a valid Solana address.</div>'; return; }
+  store('mr_my', addr);
+  $('#mineSummary').innerHTML = '<div class="empty">Reading your wallet…</div>'; $('#mineGrid').innerHTML = '';
+  try {
+    const progs = ['TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'];
+    const [bal, ...accts] = await Promise.all([rpc('getBalance', [addr]), ...progs.map(p => rpc('getTokenAccountsByOwner', [addr, { programId: p }, { encoding: 'jsonParsed' }]))]);
+    const holdings = {};
+    for (const res of accts) for (const a of res.value) {
+      const i = a.account.data.parsed.info;
+      const amt = i.tokenAmount.uiAmount || 0;
+      if (amt > 0) holdings[i.mint] = (holdings[i.mint] || 0) + amt;
+    }
+    const mints = Object.keys(holdings).slice(0, 300);
+    const pairs = await loadPairs(mints.map(m => ({ chainId: 'solana', tokenAddress: m })));
+    const rows = mints.map(m => {
+      const p = pairs['solana:' + m];
+      return p ? { mint: m, amt: holdings[m], p, a: analyze(p), value: holdings[m] * (+p.priceUsd || 0) } : { mint: m, amt: holdings[m], value: 0 };
+    }).filter(r => !WSKIP.has(r.mint)).sort((x, y) => y.value - x.value);   // skip SOL/USDC/USDT
+    const sol = bal.value / 1e9;
+    const stables = (holdings['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'] || 0) + (holdings['Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'] || 0);
+    const priced = rows.filter(r => r.p && r.value >= 0.5);
+    const dust = rows.length - priced.length;
+
+    const draw = (histNote) => {
+      const total = priced.reduce((s, r) => s + r.value, 0) + sol * solUsd + stables;
+      const known = priced.filter(r => r.pnl != null);
+      const pnl = known.reduce((s, r) => s + r.pnl, 0);
+      $('#mineSummary').innerHTML = `<div class="summary">
+        <div class="stat"><small>Total value</small><b>${fmt(total)}</b></div>
+        <div class="stat"><small>SOL</small><b>${sol.toFixed(3)} (${fmt(sol * solUsd)})</b></div>
+        ${stables >= 0.01 ? `<div class="stat"><small>USDC / USDT</small><b>${fmt(stables)}</b></div>` : ''}
+        <div class="stat"><small>Open positions</small><b>${priced.length}</b></div>
+        <div class="stat"><small>Unrealized P/L</small><b class="${pnl >= 0 ? 'up' : 'down'}">${known.length ? (pnl >= 0 ? '+' : '−') + fmt(Math.abs(pnl)) : '…'}</b></div>
+        <div class="stat"><small>Dust / unpriced</small><b>${dust}</b></div>
+      </div>
+      <div class="note">${histNote} The plan line on each coin checks it against your rule: take your initial out at 2x, cut at −40%. Hold or sell is still your call.</div>`;
+      $('#mineGrid').innerHTML = priced.length ? priced.map(r => {
+        const sig = positionSignal(r.a), plan = positionPlan(r);
+        const pnlHtml = r.pnl == null ? '<b class="sub">n/a</b>' : `<b class="${r.pnl >= 0 ? 'up' : 'down'}">${r.pnl >= 0 ? '+' : '−'}${fmt(Math.abs(r.pnl))} (${r.multiple.toFixed(2)}x)</b>`;
+        return dexCard(r.p, r.a, `<div class="stats">
+          <div class="stat"><small>Worth</small><b>${fmt(r.value)}</b></div>
+          <div class="stat"><small>Cost</small><b>${r.cost == null ? 'n/a' : fmt(r.cost)}</b></div>
+          <div class="stat"><small>Entry MC</small><b>${r.entryMcap == null ? 'n/a' : fmt(r.entryMcap)}</b></div>
+          <div class="stat"><small>P/L</small>${pnlHtml}</div></div>
+          <div style="font-weight:700;color:${plan.c}">${plan.t}</div>
+          <div class="sub" style="color:${sig.c}">${sig.t}</div>
+          ${r.entryMcap ? `<button class="ghost" style="align-self:flex-start" onclick="autoAlert('${esc(r.mint)}','${esc(r.p.baseToken.symbol)}',${r.entryMcap})"><i class="ic ic-target"></i> Alert me at 2x / −40%</button>` : ''}`);
+      }).join('') : '<div class="empty">No token positions worth more than $0.50.</div>';
+    };
+    draw(priced.length ? 'Reading your trade history to work out entries and P/L…' : 'No open positions with live prices. Coins launched in the last minute or two may not be priced yet, so check again shortly.');
+
+    if (priced.length) {
+      const applyBook = book => {
+        for (const r of priced) {
+          const b = book[r.mint];
+          if (!b || !b.tokIn || !(b.solIn || b.buyList.some(x => x.usd))) continue;
+          // average entry in dollars across every buy: SOL at that minute's price + any USDC/USDT paid
+          const usdIn = b.buyList.reduce((s, x) => s + x.sol * solPriceAt(x.t) + x.usd, 0);
+          const avgUsdPerTok = usdIn / b.tokIn;
+          r.cost = avgUsdPerTok * r.amt;                          // what the tokens you still hold cost you
+          r.multiple = (+r.p.priceUsd) / avgUsdPerTok;
+          r.pnl = r.value - r.cost;
+          r.entryMcap = (r.p.marketCap || r.p.fdv) / r.multiple;
+          r.partial = !b.opened;                                  // history didn't reach the opening buy
+        }
+      };
+      let lastFound = 0;
+      const { book, total } = await tradeHistory(addr, Object.fromEntries(priced.map(r => [r.mint, r.amt])), (n, book) => {
+        const found = Object.keys(book).length;
+        if (found !== lastFound) { lastFound = found; applyBook(book); draw(`Reading your trade history… ${n} transactions checked.`); }
+        const el = document.querySelector('#mineSummary .note'); if (el) el.firstChild.textContent = `Reading your trade history… ${n} transactions checked. `;
+      });
+      // value each buy at the SOL price when it happened, then redo the numbers
+      const firstBuy = Math.min(...Object.values(book).map(b => b.first).filter(isFinite));
+      if (isFinite(firstBuy)) await loadSolHistory(firstBuy);
+      applyBook(book);
+      draw(`Entries and P/L were worked out from your last ${total} transactions, valuing each buy at the SOL price when you made it. Positions bought earlier than that show "n/a".`);
+    }
+  } catch (e) {
+    $('#mineSummary').innerHTML = `<div class="note warn">Couldn't read the wallet: ${esc(e.message)}</div>`;
+  }
+}
+$('#loadMine').onclick = loadMine;
+$('#myAddr').onkeydown = e => e.key === 'Enter' && loadMine();
+if (store('mr_my')) $('#myAddr').value = store('mr_my');
+// http://localhost:8765/#wallet=ADDRESS opens My Wallet with that address loaded
+const hashWallet = (location.hash.match(/wallet=([1-9A-HJ-NP-Za-km-z]{32,44})/) || [])[1];
+if (hashWallet) setTimeout(() => { document.querySelector('nav button[data-p=mine]').click(); $('#myAddr').value = hashWallet; loadMine(); }, 300);
+// reconnect silently if the user connected before (wallet only answers if already trusted)
+window.addEventListener('load', () => setTimeout(() => { if (store('mr_connected')) connectWallet(true); }, 600));
+
+// ======================================================================
+// boot
+// ======================================================================
+let dirty = false;
+function setStatus() {
+  $('#wsDot').classList.toggle('off', !wsReady);
+  $('#status').textContent = wsReady ? `live · ${launches} pump.fun launches seen` : 'reconnecting to pump.fun feed…';
+}
+setInterval(() => { setStatus(); if (dirty && $('#p-pump').classList.contains('on')) { dirty = false; renderPump(); } }, 1000);
+setInterval(() => { if ($('#p-pump').classList.contains('on')) dirty = true; drawSmart(); }, 10000);
+setInterval(() => { if (!$('#search').value) scan(); }, 60000);
+setInterval(loadSol, 300000);
+
+function drawKeyStatus() {
+  $('#keyStatus').innerHTML = tradeStream ? '<b class="up"><i class="ic ic-zap"></i> Real-time mode on</b>' : store('mr_ppkey') ? '<b class="down">Key rejected or unfunded. Running in basic mode.</b>' : '<b style="color:var(--amber)">Basic mode (no key)</b>';
+}
+$('#saveKey').onclick = () => {
+  const k = $('#ppKey').value.trim();
+  if (k.length > 70) { $('#ppKey').value = ''; alert('That looks like a wallet private key, not an API key. It was NOT saved. Never paste private keys into websites.'); return; }
+  store('mr_ppkey', k || null); $('#ppKey').value = '';
+  ws && ws.close();   // reconnects with the new key
+  setTimeout(drawKeyStatus, 4000);
+};
+
+drawHandles(); drawWallets(); drawKeyStatus(); drawTrades(); drawXKey();
+if (store('mr_xint')) $('#xInterval').value = store('mr_xint');
+$('#xProv').value = xProv();
+$('#xProv').onchange = () => { store('mr_xprov', $('#xProv').value); store('mr_xkey', null); xLastPoll = 0; for (const k in chunkSince) delete chunkSince[k]; drawXKey(); xCostEstimate(); };
+$('#xDiscover').checked = discoverOn();
+$('#xDiscover').onchange = () => { store('mr_xdiscover', $('#xDiscover').checked); xCostEstimate(); };
+for (const t of store('mr_xcache') || []) { t._s = scoreTweet(t); xTweets.set(t.id, t); }
+renderX(); scheduleX(); pollX();
+setInterval(pollTrades, 15000); pollTrades();
+loadSol().then(scan);
+connectWS();
+setInterval(pollPumpCoins, 15000);
+setInterval(pollWallets, 30000);
+setTimeout(pollWallets, 1500);
+</script>
+<script type="module" src="brain.js"></script>
+<script src="nova.js"></script><script src="luna.js"></script><script src="trade.js"></script>
+<!-- ground.css sits after every script so it also wins over the styles nova/luna/trade inject into <head> -->
+<link rel="stylesheet" href="ground.css">
+</body>
+</html>

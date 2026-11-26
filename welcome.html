@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lunex: sign in</title>
+<meta name="description" content="Lunex scores every pump.fun launch live. Sign in to open the radar, track wallets and get Luna's buy and sell calls.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="welcome.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<div class="sky" aria-hidden="true"><div class="moon"></div><div class="rim"></div></div>
+
+<header class="top">
+  <a class="brand" href="/welcome"><span class="orb"></span>Lun<em>ex</em></a>
+  <nav class="top-links"><a href="#pricing">Pricing</a><a href="#luna">Luna</a></nav>
+  <button type="button" class="btn ghost" data-go="signin" id="topAction">Sign in</button>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="hero-copy">
+      <h1>Every launch,<br><em>scored live.</em></h1>
+      <p class="lede">Lunex watches every new pump.fun coin, the wallets worth following and the posts that move prices, then tells you what's worth buying. Sign in to open the dashboard.</p>
+      <ul class="facts">
+        <li><b>~1 second</b><span>from mint to your screen</span></li>
+        <li><b>6 checks</b><span>on every coin, live</span></li>
+        <li><b>0 keys</b><span>trades are approved in your own wallet</span></li>
+      </ul>
+    </div>
+
+    <!-- ===== account card ===== -->
+    <div class="card auth" id="auth" aria-live="polite">
+      <!-- sign in / create account -->
+      <div class="pane" data-pane="signin">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" class="tab on" data-mode="signin">Sign in</button>
+          <button type="button" role="tab" class="tab" data-mode="signup">Create account</button>
+        </div>
+        <div class="google-slot"><div id="gbtn"></div><button type="button" class="btn google" id="gfallback" hidden><span class="g"></span>Continue with Google</button></div>
+        <p class="gnote" id="gnote" hidden>Google sign-in isn't switched on for this server yet. Use email for now.</p>
+        <div class="or"><span>or with email</span></div>
+        <form id="emailForm" novalidate>
+          <label class="field only-signup" hidden>Name<input name="name" autocomplete="name" placeholder="What should Luna call you?"></label>
+          <label class="field">Email<input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+          <label class="field">Password<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters"></label>
+          <p class="err" id="err" role="alert"></p>
+          <button class="btn primary wide" type="submit" id="submitBtn">Sign in</button>
+        </form>
+        <p class="fine">By continuing you agree that Lunex shows trading signals, not financial advice.</p>
+      </div>
+
+      <!-- wallet step -->
+      <div class="pane" data-pane="wallet" hidden>
+        <p class="step">Step 2 of 2</p>
+        <h2>Add your Solana wallet</h2>
+        <p class="sub">Your <b>public</b> address. Lunex uses it to show your coins, profit and loss, and to size Luna's plays. It can only read, never spend.</p>
+        <form id="walletForm" novalidate>
+          <label class="field">Wallet address<input name="wallet" autocomplete="off" spellcheck="false" placeholder="e.g. 8ZG3…651e"></label>
+          <button type="button" class="btn ghost wide" id="phantomBtn"><span class="ph"></span>Fill from Phantom</button>
+          <p class="err" id="werr" role="alert"></p>
+          <button class="btn primary wide" type="submit">Open the dashboard</button>
+          <button type="button" class="btn link" id="skipWallet">Skip for now</button>
+        </form>
+        <p class="fine">Never paste a private key or seed phrase anywhere. Lunex will never ask for one.</p>
+      </div>
+
+      <!-- already signed in -->
+      <div class="pane" data-pane="done" hidden>
+        <h2>Welcome back<span id="hiName"></span>.</h2>
+        <p class="sub" id="doneSub"></p>
+        <a class="btn primary wide" href="/">Open the dashboard</a>
+        <button type="button" class="btn link" id="signOut">Sign out</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Luna, the Pro feature ===== -->
+  <section class="luna" id="luna">
+    <div class="luna-copy">
+      <h2>Luna tells you <em>what to do.</em></h2>
+      <p>Ask about any coin and Luna gives you a straight call, a confidence score and the exact plan: how much to put in, where to take profit, where to cut. She runs on your own device, so it's fast and private.</p>
+      <p class="pro-tag">Included with <b>Pro</b></p>
+    </div>
+    <div class="chat" aria-label="Example conversation with Luna">
+      <div class="msg me">is $TEEETHY a good buy?</div>
+      <div class="msg bot">
+        <div class="verdict"><b>BUY</b><span>84% confidence</span></div>
+        <p><b>Yes, buy $TEEETHY.</b> Passes 5/6 checks: momentum building, safety 65+, not already parabolic.</p>
+        <p class="plan"><b>The play:</b> $0.39 at $56.4K market cap.<br>Take profit at <b>$112.8K</b> (2x): <b class="up">+$0.39</b><br>Stop at <b>$33.9K</b> (−40%): <b class="down">−$0.16</b></p>
+      </div>
+      <div class="msg me">trade for me</div>
+      <div class="msg bot"><p>Ticket's open and sized to your wallet. <b>Approve it in Phantom</b> to place it.</p></div>
+    </div>
+  </section>
+
+  <!-- ===== pricing ===== -->
+  <section class="pricing" id="pricing">
+    <h2>Free to watch. <em>Pro to win.</em></h2>
+    <div class="plans">
+      <div class="plan">
+        <h3>Free</h3>
+        <p class="price">$0</p>
+        <ul>
+          <li>Live radar with momentum and safety scores</li>
+          <li>Every new pump.fun launch with rug flags</li>
+          <li>Your wallet, coins and real profit and loss</li>
+          <li>Take-profit and stop-loss alerts</li>
+          <li>Smart-money wallet tracking</li>
+        </ul>
+        <button type="button" class="btn ghost wide" data-go="signup">Create free account</button>
+      </div>
+      <div class="plan pro">
+        <h3>Pro</h3>
+        <p class="price">$20<span>/week</span></p>
+        <ul>
+          <li><b>Everything in Free</b></li>
+          <li><b>Luna AI:</b> buy, skip and sell calls on any coin</li>
+          <li>Exact money plans sized to your wallet</li>
+          <li>Trade for me: best setup, one tap, your approval</li>
+          <li>Ask her anything, crypto or not</li>
+        </ul>
+        <button type="button" class="btn primary wide" data-go="signup">Start with Pro</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span class="brand small"><span class="orb"></span>Lun<em>ex</em></span>
+  <span>Data from DexScreener, PumpPortal and the Solana RPC</span>
+  <span>Signals, not financial advice</span>
+</footer>
+
+<script src="welcome.js"></script>
+</body>
+</html>
