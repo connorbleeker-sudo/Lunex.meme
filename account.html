@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account settings · Lunex</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="account.css">
+</head>
+<body>
+<div class="sky" aria-hidden="true"></div>
+
+<header class="top">
+  <a class="brand" href="/"><span class="orb"></span>Lun<em>ex</em></a>
+  <span class="crumb">Account settings</span>
+  <a class="back" href="/">← Back to dashboard</a>
+</header>
+
+<div class="wrap">
+  <!-- side nav -->
+  <aside class="side">
+    <div class="me">
+      <span class="av" id="av">?</span>
+      <div><b id="meName">…</b><small id="meEmail"></small></div>
+    </div>
+    <nav aria-label="Settings sections">
+      <a href="#plan" class="on">Plan &amp; billing</a>
+      <a href="#profile">Profile</a>
+      <a href="#wallet">Wallet</a>
+      <a href="#security">Sign-in &amp; security</a>
+      <a href="#email">Email</a>
+      <a href="#device">This device</a>
+      <a href="#privacy">Privacy &amp; data</a>
+      <a href="#danger" class="danger">Delete account</a>
+    </nav>
+    <button type="button" class="signout" id="signOut">Sign out</button>
+  </aside>
+
+  <main>
+    <h1>Account <em>settings.</em></h1>
+    <p class="lede">Your profile, plan, wallet and data, in one place.</p>
+
+    <!-- plan hero (filled by account-page.js) -->
+    <section class="card plan-hero" id="plan" aria-labelledby="plan-h"></section>
+
+    <section class="card" id="billing" aria-labelledby="billing-h">
+      <header><h2 id="billing-h">Payment history</h2><p>Every Pro payment on this account.</p></header>
+      <div id="payList"></div>
+    </section>
+
+    <section class="card" id="profile" aria-labelledby="profile-h">
+      <header><h2 id="profile-h">Profile</h2><p>How Luna greets you, and where we contact you.</p></header>
+      <form class="row-form" id="nameForm">
+        <label>Name<input name="name" maxlength="60" autocomplete="name" placeholder="What should Luna call you?"></label>
+        <button type="submit" class="btn">Save name</button>
+      </form>
+      <div class="kv">
+        <div><span>Email</span><b id="email"></b></div>
+        <div><span>Member since</span><b id="since"></b></div>
+        <div><span>Sign-in</span><b id="methods"></b></div>
+      </div>
+      <p class="msg" id="nameMsg" role="status"></p>
+    </section>
+
+    <section class="card" id="wallet" aria-labelledby="wallet-h">
+      <header><h2 id="wallet-h">Wallet</h2><p>Your <b>public</b> Solana address. Lunex uses it to show your coins and profit and loss and to size Luna's plays. It can only read, never spend.</p></header>
+      <form class="row-form" id="walletForm">
+        <label>Public wallet address<input name="wallet" spellcheck="false" autocomplete="off" placeholder="e.g. 8ZG3…651e"></label>
+        <button type="button" class="btn ghost" id="phantomFill">Fill from Phantom</button>
+        <button type="submit" class="btn">Save wallet</button>
+      </form>
+      <button type="button" class="link" id="walletRemove" hidden>Remove wallet from account</button>
+      <p class="msg" id="walletMsg" role="status"></p>
+      <p class="warn">Never paste a seed phrase or private key here, or anywhere. Lunex will never ask for one.</p>
+    </section>
+
+    <section class="card" id="security" aria-labelledby="sec-h">
+      <header><h2 id="sec-h">Sign-in &amp; security</h2><p id="secSub">Change your password or sign out of other devices.</p></header>
+      <form class="stack-form" id="pwForm">
+        <label id="curWrap">Current password<input name="current" type="password" autocomplete="current-password"></label>
+        <label>New password<input name="new" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></label>
+        <button type="submit" class="btn" id="pwBtn">Change password</button>
+        <p class="msg" id="pwMsg" role="status"></p>
+      </form>
+      <div class="split">
+        <div><b>Active sessions</b><small id="sessions"></small></div>
+        <button type="button" class="btn ghost" id="signOutOthers">Sign out other devices</button>
+      </div>
+      <p class="msg" id="sessMsg" role="status"></p>
+    </section>
+
+    <section class="card" id="email" aria-labelledby="email-h">
+      <header><h2 id="email-h">Email</h2><p>One email a week, Monday afternoon: your practice portfolio, your alerts, how your calls did, and the week's best community calls.</p></header>
+      <label class="toggle"><span><b>Weekly recap</b><small id="recapState"></small></span><input type="checkbox" id="recap"><i aria-hidden="true"></i></label>
+      <div class="btn-row"><a class="btn ghost" href="/api/account/recap-preview" target="_blank" rel="noopener">Preview this week's email</a><button type="button" class="btn ghost" id="recapTest">Send me a test</button></div>
+      <p class="msg" id="recapMsg" role="status"></p>
+    </section>
+
+    <section class="card" id="device" aria-labelledby="dev-h">
+      <header><h2 id="dev-h">This device</h2><p>Your watchlists, tracked wallets, alerts and practice portfolio are <b>saved to your account</b> and follow you to any device. Sound, notifications and API keys stay in this browser only.</p></header>
+      <div class="toggles">
+        <label class="toggle"><span><b>Sound effects</b><small>Clicks and alert chimes in the dashboard</small></span><input type="checkbox" id="sound"><i aria-hidden="true"></i></label>
+        <div class="split"><div><b>Desktop notifications</b><small id="notifState"></small></div><button type="button" class="btn ghost" id="notifBtn">Turn on</button></div>
+      </div>
+      <div class="kv" id="localStats"></div>
+      <div class="btn-row">
+        <button type="button" class="btn ghost" id="clearKeys">Remove saved API keys</button>
+        <button type="button" class="btn ghost" id="clearLocal">Clear Lunex data on this device</button>
+      </div>
+      <p class="msg" id="devMsg" role="status"></p>
+    </section>
+
+    <section class="card" id="privacy" aria-labelledby="priv-h">
+      <header><h2 id="priv-h">Privacy &amp; data</h2><p>Lunex keeps only what it needs. Luna runs on your device, and we don't sell data or use ad trackers.</p></header>
+      <div class="split">
+        <div><b>Download your data</b><small>Everything stored on our servers about this account, as a JSON file</small></div>
+        <a class="btn ghost" href="/api/account/export" download>Download</a>
+      </div>
+      <div class="kv"><div><span>Terms accepted</span><b id="terms"></b></div></div>
+      <nav class="legal-links" aria-label="Legal"><a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/refunds" target="_blank" rel="noopener">Refund Policy</a><a href="/cookies" target="_blank" rel="noopener">Cookie Policy</a><a href="mailto:{{CONTACT_EMAIL}}">Contact {{CONTACT_EMAIL}}</a></nav>
+    </section>
+
+    <section class="card danger-card" id="danger" aria-labelledby="del-h">
+      <header><h2 id="del-h">Delete account</h2><p id="delSub">Permanently deletes your account, wallet link and any Pro time left. This can't be undone.</p></header>
+      <form class="row-form" id="delForm">
+        <label>Type <b id="delEmail"></b> to confirm<input name="confirm" type="email" autocomplete="off" spellcheck="false"></label>
+        <button type="submit" class="btn red">Delete my account</button>
+      </form>
+      <p class="msg" id="delMsg" role="alert"></p>
+    </section>
+
+    <footer class="foot">© {{YEAR}} {{LEGAL_NAME}} · United States · Signals, not financial advice</footer>
+  </main>
+</div>
+
+<script src="account-page.js"></script>
+</body>
+</html>

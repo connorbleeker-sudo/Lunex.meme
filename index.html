@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lunex: live memecoin scanner</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
   :root{--bg:#0a0b10;--card:#12141c;--line:#1f2230;--text:#e8e9f0;--dim:#8a8ea3;--green:#2ee59d;--red:#ff4d6d;--amber:#ffb84d;--accent:#8b5cf6}
   *{box-sizing:border-box}
@@ -80,6 +81,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="nova.css">
+<script src="lunex-ui.js"></script>
 <script src="account.js"></script>
 <script src="checkout.js" defer></script>
 </head>
@@ -93,9 +95,10 @@
     <button data-p="xfeed">Chatter<span id="bigCount" class="count" style="display:none"></span></button>
     <button data-p="smart">Wallets<span id="smartCount" class="count" style="display:none"></span></button>
     <button data-p="mine">Vault</button>
-    <button data-p="atlas" class="nv-hidden">Constellation</button><button data-p="guide" class="nv-hidden">Field guide</button></nav>
+    <button data-p="calls">Calls<span id="callsCount" class="count" style="display:none"></span></button>
+    <button data-p="practice" class="nv-hidden">Practice</button><button data-p="atlas" class="nv-hidden">Constellation</button><button data-p="guide" class="nv-hidden">Field guide</button></nav>
   <div class="nv-more"><button type="button" class="ghost nv-more-btn">More <i class="ic ic-down-chev"></i></button>
-    <div class="nv-more-menu"><button type="button" data-go="atlas"><b>Constellation</b><small>Every coin as a star</small></button><button type="button" data-go="guide"><b>Field guide</b><small>What the scores mean</small></button></div></div>
+    <div class="nv-more-menu"><button type="button" data-go="practice"><b>Practice</b><small>Trade with 10 pretend SOL</small></button><button type="button" data-go="atlas"><b>Constellation</b><small>Every coin as a star</small></button><button type="button" data-go="guide"><b>Field guide</b><small>What the scores mean</small></button></div></div>
   <span class="live" style="margin-left:auto" title="Live data connection"><span id="wsDot" class="dot off"></span><span id="status">connecting…</span></span>
   <button class="ghost" id="notifyBtn"><i class="ic ic-bell"></i> Alerts</button>
 </header>
@@ -114,11 +117,16 @@
   </div>
 
   <div class="ov-telemetry">
-    <div><small>LAUNCHES SEEN</small><b data-count="launches">0</b><span>on pump.fun this session</span></div>
-    <div><small>PAIRS ON RADAR</small><b data-count="pairs">0</b><span>scored live from DexScreener</span></div>
-    <div><small>RUNNING HOT</small><b data-count="hot">0</b><span>momentum 60 or higher</span></div>
+    <div><small>LAUNCHES SCANNED</small><b data-stat="launchesAll">—</b><span data-stat-since>all time, every pump.fun coin</span></div>
+    <div><small>LAST 24 HOURS</small><b data-stat="launches24h">—</b><span>new launches scored</span></div>
+    <div><small>RUG CHECKS</small><b data-stat="checksAll">—</b><span>run by traders on Lunex</span></div>
+    <div><small>COMMUNITY CALLS</small><b data-stat="callsAll">—</b><span>posted in Calls</span></div>
+    <div><small>PAIRS ON RADAR</small><b data-count="pairs">0</b><span>scored live right now</span></div>
     <div><small>SOLANA</small><b data-count="sol">n/a</b><span>live SOL price</span></div>
   </div>
+
+  <!-- filled by home.js: rug check, live launches, community calls, practice -->
+  <div class="ov-live" id="ovLive"></div>
 
   <div class="ov-sec">
     <div class="ov-sec-head"><div><h2>Five views, <em>one market.</em></h2></div></div>
@@ -133,7 +141,7 @@
 
   <div class="ov-truth"><div><p>Most new memecoins go to zero. The ones that don't usually show it early: who is buying, how fast, and whether the dev still holds. Lunex doesn't predict which coin that will be. It puts those three things in front of you while they happen.</p><small>Scores describe current trading activity. They are not price forecasts or financial advice.</small></div></div>
 
-  <div class="nv-foot"><b>Lunex</b><span>Data from DexScreener, PumpPortal and the Solana RPC</span><span>Not financial advice</span></div>
+  <div class="nv-foot"><b>Lunex</b><span>Data from DexScreener, PumpPortal and the Solana RPC · Not financial advice</span><span class="nv-legal"><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/privacy" target="_blank" rel="noopener">Privacy</a><a href="/refunds" target="_blank" rel="noopener">Refunds</a><a href="/cookies" target="_blank" rel="noopener">Cookies</a><span>© {{YEAR}} {{LEGAL_NAME}} · <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></span></span></div>
 </section>
 
 <!-- ============ LUNA (filled in by luna.js) ============ -->
@@ -318,6 +326,12 @@
   <div id="mineGrid" class="grid"></div>
 </section>
 
+<!-- ============ COMMUNITY CALLS (calls.js) ============ -->
+<section class="page" id="p-calls"><div id="callsApp"></div></section>
+
+<!-- ============ PRACTICE (practice.js) ============ -->
+<section class="page" id="p-practice"><div id="practiceApp"></div></section>
+
 <script>
 const API = 'https://api.dexscreener.com';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -413,10 +427,19 @@ async function loadPairs(list) {
   const best = {};
   for (const p of pairs) {
     const k = p.chainId + ':' + p.baseToken.address;
-    if (!best[k] || (p.liquidity?.usd || 0) > (best[k].liquidity?.usd || 0)) best[k] = p;
+    if (!best[k] || livelier(p, best[k])) best[k] = p;
   }
   return best;
 }
+// A coin can trade in several pools. Use the one where it's actually trading now: dead or migrated pools
+// (e.g. a pump.fun curve after graduation) can keep reporting liquidity with a frozen, out-of-date price.
+function livelier(a, b) {
+  const act = p => (p.volume?.h1 || 0) * 24 + (p.volume?.h24 || 0) + ((p.txns?.h24?.buys || 0) + (p.txns?.h24?.sells || 0)) * 5;
+  const da = act(a), db = act(b);
+  if (da !== db) return da > db;
+  return (a.liquidity?.usd || 0) > (b.liquidity?.usd || 0);
+}
+window.livelier = livelier;
 
 async function scan() {
   try {
@@ -435,7 +458,7 @@ async function scan() {
 async function searchCA(q) {
   const r = await getJSON(`${API}/latest/dex/search?q=${encodeURIComponent(q)}`).catch(() => ({pairs:[]}));
   const best = {};
-  for (const p of r.pairs || []) { const k = p.chainId + ':' + p.baseToken.address; if (!best[k] || (p.liquidity?.usd||0) > (best[k].liquidity?.usd||0)) best[k] = p; }
+  for (const p of r.pairs || []) { const k = p.chainId + ':' + p.baseToken.address; if (!best[k] || livelier(p, best[k])) best[k] = p; }
   tokens = Object.values(best).map(p => ({ pair: p, a: analyze(p) }));
   renderScanner();
 }
@@ -458,10 +481,10 @@ function dexCard(p, a, extra = '') {
       <span class="badge" style="background:color-mix(in srgb, ${a.color} 18%, transparent);color:${a.color}">${a.label}</span>
     </div>
     ${extra}
-    <div class="bars">
+    ${window.LunexUI ? `<div class="lx-dials">${LunexUI.dial(a.momentum, 'momentum', 'Momentum', 72)}${LunexUI.dial(a.safety, 'safety', 'Safety', 72)}</div>` : `<div class="bars">
       <span>Momentum</span>${bar(a.momentum, 'var(--green)')}<b>${a.momentum}</b>
       <span>Safety</span>${bar(a.safety, 'var(--amber)')}<b>${a.safety}</b>
-    </div>
+    </div>`}
     <div class="stats">
       <div class="stat"><small>Price</small><b>${fmt(+p.priceUsd)}</b></div>
       <div class="stat"><small>Mkt cap</small><b>${fmt(a.fdv)}</b></div>
@@ -478,7 +501,9 @@ function dexCard(p, a, extra = '') {
       <a href="${x.all}" target="_blank" rel="noopener">X mentions</a>
       ${x.mine ? `<a href="${x.mine}" target="_blank" rel="noopener"><i class="ic ic-star"></i> From my list</a>` : ''}
       <a href="#" onclick="navigator.clipboard.writeText('${esc(p.baseToken.address)}');this.textContent='Copied';return false"><i class="ic ic-copy"></i> CA</a>
-      ${p.chainId === 'solana' ? `<a href="#" onclick="watchCoin('${esc(p.baseToken.address)}');return false"><i class="ic ic-target"></i> Set alert</a>` : ''}
+      ${p.chainId === 'solana' ? `<a href="#" onclick="watchCoin('${esc(p.baseToken.address)}');return false"><i class="ic ic-target"></i> Set alert</a>
+      <a href="#" onclick="window.practiceBuy&&practiceBuy('${esc(p.baseToken.address)}');return false">Practice buy</a>
+      <a href="#" onclick="window.postCall&&postCall('${esc(p.baseToken.address)}');return false">Post a call</a>` : ''}
     </div>
   </div>`;
 }
@@ -1231,7 +1256,34 @@ window.autoAlert = (mint, sym, entry) => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
+// value and P/L of one position at its current price (entry stays what your trade history says)
+function reprice(r) {
+  r.value = r.amt * (+r.p.priceUsd || 0);
+  if (r.avg) {
+    r.cost = r.avg * r.amt;                                 // what the tokens you still hold cost you
+    r.multiple = (+r.p.priceUsd) / r.avg;
+    r.pnl = r.value - r.cost;
+    r.entryMcap = (r.p.marketCap || r.p.fdv) / r.multiple;
+  }
+}
+let mineLive = null, mineBusy = false;
+async function refreshMine() {
+  const m = mineLive;
+  if (!m || mineBusy || !$('#p-mine').classList.contains('on') || document.hidden) return;
+  mineBusy = true;
+  try {
+    const pairs = await loadPairs(m.priced.map(r => ({ chainId: 'solana', tokenAddress: r.mint })));
+    if (m !== mineLive) return;                             // a new wallet was loaded meanwhile
+    for (const r of m.priced) { const p = pairs['solana:' + r.mint]; if (p) { r.p = p; r.a = analyze(p); reprice(r); } }
+    m.at = Date.now();
+    m.draw(`Live: prices updated ${new Date(m.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}, every 20 seconds.`);
+  } catch { } finally { mineBusy = false; }
+}
+setInterval(refreshMine, 20000);
+document.querySelector('nav button[data-p="mine"]')?.addEventListener('click', () => setTimeout(refreshMine, 50));
+
 async function loadMine() {
+  mineLive = null;
   const addr = $('#myAddr').value.trim();
   if (addr.length > 60 || addr.split(/\s+/).length >= 12) {
     $('#myAddr').value = '';
@@ -1296,12 +1348,9 @@ async function loadMine() {
           if (!b || !b.tokIn || !(b.solIn || b.buyList.some(x => x.usd))) continue;
           // average entry in dollars across every buy: SOL at that minute's price + any USDC/USDT paid
           const usdIn = b.buyList.reduce((s, x) => s + x.sol * solPriceAt(x.t) + x.usd, 0);
-          const avgUsdPerTok = usdIn / b.tokIn;
-          r.cost = avgUsdPerTok * r.amt;                          // what the tokens you still hold cost you
-          r.multiple = (+r.p.priceUsd) / avgUsdPerTok;
-          r.pnl = r.value - r.cost;
-          r.entryMcap = (r.p.marketCap || r.p.fdv) / r.multiple;
+          r.avg = usdIn / b.tokIn;                                // average entry, dollars per token
           r.partial = !b.opened;                                  // history didn't reach the opening buy
+          reprice(r);
         }
       };
       let lastFound = 0;
@@ -1316,6 +1365,8 @@ async function loadMine() {
       applyBook(book);
       draw(`Entries and P/L were worked out from your last ${total} transactions, valuing each buy at the SOL price when you made it. Positions bought earlier than that show "n/a".`);
     }
+    // keep the numbers live: re-price every open position every 20 seconds while the Vault is open
+    mineLive = { addr, priced, draw, at: Date.now(), note: priced.length ? 'Prices update every 20 seconds.' : '' };
   } catch (e) {
     $('#mineSummary').innerHTML = `<div class="note warn">Couldn't read the wallet: ${esc(e.message)}</div>`;
   }
@@ -1370,6 +1421,7 @@ setTimeout(pollWallets, 1500);
 </script>
 <script type="module" src="brain.js"></script>
 <script src="nova.js"></script><script src="luna.js"></script><script src="trade.js"></script>
+<script src="home.js"></script><script src="practice.js"></script><script src="calls.js"></script>
 <!-- ground.css sits after every script so it also wins over the styles nova/luna/trade inject into <head> -->
 <link rel="stylesheet" href="ground.css">
 </body>

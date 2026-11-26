@@ -2,8 +2,8 @@
 
 Settings (environment variables, e.g. Railway > Variables):
   LUNEX_PAY_WALLET=<public address>   wallet that receives crypto payments (required for crypto)
-  LUNEX_PRICE_WEEK=20                 USD price of a 7-day pass   (default 20)
-  LUNEX_PRICE_MONTH=60                USD price of a 30-day pass  (default 60)
+  LUNEX_PRICE_WEEK=7                  USD price of a 7-day pass   (default 7)
+  LUNEX_PRICE_MONTH=20                USD price of a 30-day pass  (default 20)
   STRIPE_SECRET_KEY=sk_...            Stripe secret key           (card payments)
   STRIPE_WEBHOOK_SECRET=whsec_...     signing secret of the webhook endpoint /api/stripe/webhook
   STRIPE_PRICE_WEEK=price_...         recurring weekly Price id from the Stripe dashboard
@@ -34,8 +34,8 @@ def plans():
             return max(0.5, float(os.environ.get(k, d)))
         except ValueError:
             return float(d)
-    return {"week": {"id": "week", "label": "7 days", "usd": num("LUNEX_PRICE_WEEK", 20), "days": 7},
-            "month": {"id": "month", "label": "30 days", "usd": num("LUNEX_PRICE_MONTH", 60), "days": 30}}
+    return {"week": {"id": "week", "label": "7 days", "usd": num("LUNEX_PRICE_WEEK", 7), "days": 7},
+            "month": {"id": "month", "label": "30 days", "usd": num("LUNEX_PRICE_MONTH", 20), "days": 30}}
 
 
 def pay_wallet():
@@ -244,6 +244,14 @@ def stripe_portal(user, base_url):
     if not user["stripe_customer"]:
         raise ValueError("No card subscription on this account.")
     return stripe_api("POST", "/billing_portal/sessions", {"customer": user["stripe_customer"], "return_url": base_url + "/"})["url"]
+
+
+def stripe_cancel_all(customer):
+    """Cancel every live subscription of a Stripe customer right away (used when an account is deleted)."""
+    subs = stripe_api("GET", "/subscriptions", {"customer": customer, "status": "all", "limit": 100}).get("data") or []
+    for s in subs:
+        if s.get("status") not in ("canceled", "incomplete_expired"):
+            stripe_api("DELETE", "/subscriptions/" + s["id"])
 
 
 def verify_stripe_signature(payload, header, secret, tolerance=300):

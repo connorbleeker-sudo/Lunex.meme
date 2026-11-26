@@ -1,10 +1,9 @@
 // Lunex account layer for the dashboard. The server injects window.LUNEX_USER into the page.
 // - copies the account's saved wallet into the Vault and Luna before their scripts read it
-// - adds the account menu to the header (plan, wallet, upgrade, sign out)
+// - adds the account menu to the header (plan, wallet, upgrade, account settings, sign out); everything else lives on /account
 (() => {
 const U = window.LUNEX_USER;
 if (!U) return;
-const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 // wallet from the account -> the places the app looks for it (runs before the app's own scripts)
 if (U.wallet) {
@@ -14,6 +13,36 @@ if (U.wallet) {
   } catch { }
 }
 document.documentElement.dataset.plan = U.plan;
+
+// account sync: watchlists, tracked wallets, alerts, X lists and the practice portfolio follow the account across
+// devices. The server's copy is written into localStorage before the app reads it; later changes are pushed back.
+// API keys are never synced.
+(() => {
+  const SYNC = ['mr_wallets', 'mr_trades', 'mr_xaccounts', 'mr_handles', 'mr_xdiscover', 'nv-sound', 'luna-picks', 'lx-practice'];
+  const saved = window.LUNEX_SYNC || {}, rawSet = Storage.prototype.setItem, rawRemove = Storage.prototype.removeItem;
+  const sent = {}, upNow = {};
+  try {
+    SYNC.forEach(k => {
+      const local = localStorage.getItem(k);
+      if (saved[k]) { sent[k] = saved[k].v; if (local !== saved[k].v) rawSet.call(localStorage, k, saved[k].v); }
+      else if (local != null) upNow[k] = local;          // first time on this account: keep what this browser had
+    });
+  } catch { return; }
+  let pending = {}, timer = 0;
+  const flush = () => {
+    clearTimeout(timer); timer = 0;
+    const items = pending; pending = {};
+    if (!Object.keys(items).length) return;
+    fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }), keepalive: true })
+      .then(r => { if (r.ok) Object.assign(sent, items); else throw 0; })
+      .catch(() => { pending = { ...items, ...pending }; });
+  };
+  const queue = (k, v) => { if (sent[k] === v) return; pending[k] = v; clearTimeout(timer); timer = setTimeout(flush, 2000); };
+  Storage.prototype.setItem = function (k, v) { rawSet.call(this, k, v); if (this === window.localStorage && SYNC.includes(k)) queue(k, String(v)); };
+  Storage.prototype.removeItem = function (k) { rawRemove.call(this, k); if (this === window.localStorage && SYNC.includes(k)) queue(k, null); };
+  Object.entries(upNow).forEach(([k, v]) => queue(k, v));
+  addEventListener('pagehide', flush);
+})();
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const short = w => w ? w.slice(0, 4) + '…' + w.slice(-4) : 'Not set';
@@ -49,18 +78,17 @@ function mount() {
   const header = document.querySelector('header'); if (!header || header.querySelector('.acct')) return;
   const el = document.createElement('div'); el.className = 'acct';
   el.innerHTML = `
-    <button type="button" class="acct-btn" aria-haspopup="true" aria-expanded="false" title="${esc(U.email)}">
+    <button type="button" class="acct-btn" aria-expanded="false" aria-label="Account: ${esc(U.email)}" title="${esc(U.email)}">
       <span class="acct-av">${esc((U.name || U.email)[0].toUpperCase())}</span>
       <span class="acct-plan ${U.plan === 'pro' ? 'is-pro' : ''}">${U.plan === 'pro' ? 'PRO' : 'FREE'}</span>
     </button>
-    <div class="acct-menu" role="menu">
+    <div class="acct-menu">
       <div class="acct-who"><b>${esc(U.name)}</b><small>${esc(U.email)}</small></div>
-      <div class="acct-row"><span>Plan</span><b>${U.plan === 'pro' ? (U.lifetime ? 'Pro' : U.card ? 'Pro · card' : 'Pro until ' + fmtDate(U.proUntil)) : 'Free'}</b></div>
+      <div class="acct-row"><span>Plan</span><b class="${U.plan === 'pro' ? 'acct-is-pro' : ''}">${U.plan === 'pro' ? (U.lifetime ? '★ Pro' : U.card ? '★ Pro · card' : '★ Pro until ' + fmtDate(U.proUntil)) : 'Free'}</b></div>
       <div class="acct-row"><span>Wallet</span><b class="acct-wallet">${esc(short(U.wallet))}</b></div>
-      <form class="acct-wform" hidden><input placeholder="New public wallet address" spellcheck="false"><button type="submit">Save</button><p class="acct-err"></p></form>
-      <button type="button" class="acct-item" data-act="wallet">${U.wallet ? 'Change wallet' : 'Add wallet'}</button>
-      ${U.plan !== 'pro' ? '<button type="button" class="acct-item acct-up" data-act="upgrade">Upgrade to Pro: unlock Luna</button>'
+      ${U.plan !== 'pro' ? '<button type="button" class="acct-item acct-up" data-act="upgrade">★ Unlock Luna with Pro</button>'
         : (!U.lifetime && !U.card ? '<button type="button" class="acct-item acct-up" data-act="upgrade">Extend Pro</button>' : '')}
+      <a class="acct-item" href="/account">Account settings</a>
       ${U.card ? '<button type="button" class="acct-item" data-act="billing">Manage billing</button>' : ''}
       <button type="button" class="acct-item" data-act="logout">Sign out</button>
     </div>`;
@@ -74,18 +102,8 @@ function mount() {
     if (act === 'logout') { await fetch('/api/logout', { method: 'POST' }).catch(() => { }); location.href = '/welcome'; }
     if (act === 'upgrade') { el.classList.remove('open'); window.LunexAccount.upgrade(); }
     if (act === 'billing') window.LunexAccount.billing();
-    if (act === 'wallet') { const f = el.querySelector('.acct-wform'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); }
   });
-  el.querySelector('.acct-wform').addEventListener('submit', async e => {
-    e.preventDefault();
-    const v = e.target.querySelector('input').value.trim(), err = e.target.querySelector('.acct-err');
-    if (v.split(/\s+/).length >= 12 || v.length > 60) { e.target.querySelector('input').value = ''; err.textContent = 'That looks like a seed phrase or private key. Cleared, not sent.'; return; }
-    if (!SOL_ADDR.test(v)) { err.textContent = "That isn't a valid Solana address."; return; }
-    const r = await fetch('/api/wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet: v }) });
-    if (!r.ok) { err.textContent = 'Could not save. Try again.'; return; }
-    localStorage.setItem('mr_my', JSON.stringify(v)); localStorage.setItem('luna-wallet', v);
-    location.reload();
-  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && el.classList.contains('open')) { el.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); btn.focus(); } });
 }
 const start = () => { mount(); banner(); };
 document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start) : start();

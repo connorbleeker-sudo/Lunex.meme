@@ -6,7 +6,7 @@
 const U = window.LUNEX_USER; if (!U) return;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
-let cfg = null, plan = 'week', busy = false, solPx = 0;
+let cfg = null, plan = 'month', busy = false, solPx = 0;
 
 const api = async (path, body) => {
   const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -26,7 +26,7 @@ el.innerHTML = `<div class="lxp-card" role="dialog" aria-modal="true" aria-label
   <div class="lxp-plans" role="radiogroup"></div>
   <div class="lxp-pay"></div>
   <p class="lxp-status" role="status"></p>
-  <p class="lxp-fine">Crypto payments go straight to the Lunex wallet and are checked on the Solana blockchain. Lunex never sees your keys. Signals, not financial advice.</p>
+  <p class="lxp-fine">Crypto payments go straight to the Lunex wallet and are checked on the Solana blockchain. Lunex never sees your keys. Payments are final and card plans can be cancelled anytime (<a href="/refunds" target="_blank" rel="noopener">refund policy</a>). By paying you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a>. Signals, not financial advice.</p>
 </div>`;
 document.addEventListener('DOMContentLoaded', () => document.body.appendChild(el));
 if (document.body) document.body.appendChild(el);
@@ -37,9 +37,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !el.hidden
 function close() { if (busy) return; el.hidden = true; status(''); }
 
 function draw() {
-  const P = cfg.plans;
+  const P = cfg.plans, W = P.find(x => x.id === 'week');
   $('.lxp-plans').innerHTML = P.map(p => `<button type="button" role="radio" aria-checked="${p.id === plan}" class="lxp-plan${p.id === plan ? ' on' : ''}" data-plan="${p.id}">
-    <b>$${p.usd % 1 ? p.usd.toFixed(2) : p.usd}</b><span>${esc(p.label)}</span>${p.id === 'month' ? `<small>save ${Math.round((1 - p.usd / (P[0].usd * 30 / 7)) * 100)}%</small>` : ''}</button>`).join('');
+    <b>$${p.usd % 1 ? p.usd.toFixed(2) : p.usd}</b><span>${esc(p.label)}</span>${p.id === 'month' && W && p.usd < W.usd * p.days / 7 ? `<small>Best value · save ${Math.round((1 - p.usd / (W.usd * p.days / 7)) * 100)}%</small>` : ''}</button>`).join('');
   const p = P.find(x => x.id === plan), sol = solPx ? (p.usd / solPx) : 0;
   const card = cfg.card && cfg.cardPlans.includes(plan);
   $('.lxp-pay').innerHTML = (cfg.crypto ? `

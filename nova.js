@@ -28,8 +28,10 @@ const PAGES = {
   xfeed:    { mode: 3, c1: [.64, .42, 1], c2: [1, .31, .85], n: '03', eye: 'Source: X search', title: 'Chatter', sub: 'Posts from accounts that have moved crypto prices before, scored by follower count and how fast likes are coming in. Accounts over 10M followers trigger an alert.', viz: 'scope', tag: 'POSTS PER MINUTE' },
   smart:    { mode: 4, c1: [.24, 1, .69], c2: [.83, 1, .24], n: '04', eye: 'Source: Solana RPC', title: 'Wallets', sub: 'The wallets you track, linked to the coins they buy and sell. When two of them buy the same coin within 30 minutes, it shows up as a convergence.', viz: 'graph', tag: 'WALLET TO COIN LINKS' },
   mine:     { mode: 5, c1: [1, .78, .38], c2: [1, .62, .37], n: '05', eye: 'Source: your public address', title: 'Vault', sub: 'Your entries, profit and loss, and the take-profit and stop-loss levels you set. Alerts fire when a level is hit.', viz: 'vault', tag: 'ON-CHAIN BALANCE' },
-  atlas:    { mode: 1, c1: [.49, .91, 1], c2: [.72, .65, 1], n: '06', eye: 'Derived from the radar', title: 'Constellation', sub: 'Every pair on the radar, with safety on the x-axis and momentum on the y-axis. Top right means hot and comparatively safe. Few coins land there.' },
-  guide:    { mode: 3, c1: [.89, .87, 1], c2: [.65, .6, 1], n: '07', eye: 'Reference', title: 'Field guide', sub: 'What each score measures, and what it can\'t tell you.' },
+  calls:    { mode: 3, c1: [1, .5, .82], c2: [1, .42, .17], n: '06', eye: 'Source: Lunex traders', title: 'Calls', sub: 'Traders post the coins they like and the coins they\'re avoiding. Every call is stamped with the price when it was posted, so you can see how it played out.' },
+  practice: { mode: 5, c1: [.24, 1, .69], c2: [.49, .91, 1], n: '07', eye: 'Pretend money, real prices', title: 'Practice', sub: 'Trade any coin with 10 pretend SOL at live prices. Test your entries and exits, and your nerves, before real money is on the line.' },
+  atlas:    { mode: 1, c1: [.49, .91, 1], c2: [.72, .65, 1], n: '08', eye: 'Derived from the radar', title: 'Constellation', sub: 'Every pair on the radar, with safety on the x-axis and momentum on the y-axis. Top right means hot and comparatively safe. Few coins land there.' },
+  guide:    { mode: 3, c1: [.89, .87, 1], c2: [.65, .6, 1], n: '09', eye: 'Reference', title: 'Field guide', sub: 'What each score measures, and what it can\'t tell you.' },
 };
 let page = (q('nav button.on') || {}).dataset?.p || 'overview';
 document.body.dataset.page = page;

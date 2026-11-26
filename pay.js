@@ -12,7 +12,7 @@ const fmtDate = t => new Date(t * 1000).toLocaleDateString([], { month: 'short',
 const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 const now = () => Date.now() / 1000;
 
-let cfg = null, plan = new URLSearchParams(location.search).get('plan') === 'month' ? 'month' : 'week';
+let cfg = null, plan = new URLSearchParams(location.search).get('plan') === 'week' ? 'week' : 'month';
 let cur = 'usdc', tab = 'qr', busy = false, finished = false, drawToken = 0;
 const invoices = {};          // "plan:currency" -> invoice
 const watching = new Map();   // ref -> invoice, every code shown this visit keeps being watched until it expires
@@ -31,7 +31,7 @@ const usd = n => '$' + (n % 1 ? n.toFixed(2) : n);
 function drawSummary() {
   const W = cfg.plans.find(p => p.id === 'week');
   $('.plans').innerHTML = cfg.plans.map(p => `<button type="button" role="radio" class="plan" data-plan="${p.id}" aria-checked="${p.id === plan}">
-    <b>${usd(p.usd)}</b><span>${esc(p.label)}</span>${p.id === 'month' && W ? `<small>save ${Math.round((1 - p.usd / (W.usd * 30 / 7)) * 100)}%</small>` : ''}</button>`).join('');
+    <b>${usd(p.usd)}</b><span>${esc(p.label)}</span>${p.id === 'month' && W && p.usd < W.usd * p.days / 7 ? `<small>Best value · save ${Math.round((1 - p.usd / (W.usd * p.days / 7)) * 100)}%</small>` : ''}</button>`).join('');
   $$('.plan').forEach(b => b.onclick = () => { if (busy || plan === b.dataset.plan) return; plan = b.dataset.plan; drawSummary(); refresh(); });
   $('#totalAmt').textContent = usd(P().usd);
   $('#totalSub').textContent = `${P().days} days of Pro · doesn't renew by itself`;

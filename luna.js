@@ -451,7 +451,8 @@ async function findCoin(term) {
   try {
     const r = await (await fetch('https://api.dexscreener.com/latest/dex/search?q=' + encodeURIComponent(t))).json();
     const pairs = (r.pairs || []).filter(p => isAddr ? p.baseToken.address === t : p.baseToken.symbol.toLowerCase() === tl)
-      .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0) || (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
+      .sort((a, b) => window.livelier ? (window.livelier(a, b) ? -1 : window.livelier(b, a) ? 1 : 0)   // the pool it's actually trading in, not a frozen one
+        : (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0) || (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
     if (pairs[0] && typeof window.analyze === 'function') return { kind: 'dex', p: pairs[0], a: window.analyze(pairs[0]), copies: new Set(pairs.map(p => p.baseToken.address)).size };
   } catch { }
   return c ? { kind: 'pump', c, s: scorePump(c) } : null;

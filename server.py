@@ -16,6 +16,15 @@ Hosting settings (environment variables, e.g. in Railway > Variables):
   LUNEX_PRO_EMAILS=a@x.com,...   accounts that always get Pro (you, testers)
   SOLANA_RPC=https://...         a faster Solana RPC (e.g. Helius) instead of the free public one
   PORT                           set by the host automatically
+
+Legal pages (/privacy, /terms, /refunds, /cookies) and the footers fill these in:
+  LUNEX_LEGAL_NAME="Lunex LLC"   the legal name of the business that runs Lunex
+  LUNEX_CONTACT_EMAIL=...        where users reach you (privacy requests, billing, legal notices)
+  LUNEX_LEGAL_STATE=Delaware     US state whose law governs the Terms
+
+Live stats and feed: see live.py (a pump.fun listener runs in the background; LUNEX_LIVE=off disables it).
+Weekly recap email: see recap.py for the SMTP settings. Without them, no email is sent.
+Community calls: python server.py chat-hide <id> hides a message.
 """
 import hashlib
 import hmac
@@ -32,7 +41,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import live
 import payments
+import recap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Hosting: Railway (and most hosts) set PORT and route traffic through an HTTPS proxy.
@@ -55,7 +66,29 @@ SOL_ADDR = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,24}$")
 PRO_FILES = {"/luna.js", "/brain.js", "/brain-worker.js"}           # Luna's AI: only sent to Pro accounts
 NEVER_SERVE = re.compile(r"(^/\.|/\.|\.py$|\.db$|\.db-|lunex\.config\.json$|^/_original/|railway\.json$|requirements\.txt$)", re.I)
-PUBLIC_PAGES = {"/welcome", "/welcome.html", "/welcome.css", "/welcome.js", "/favicon.ico"}
+PUBLIC_PAGES = {"/welcome", "/welcome.html", "/welcome.css", "/welcome.js", "/favicon.ico", "/favicon.svg", "/legal.css", "/lunex-ui.js", "/welcome-live.js"}
+LEGAL_PAGES = {"/privacy": "privacy.html", "/terms": "terms.html", "/refunds": "refunds.html", "/cookies": "cookies.html"}
+
+
+SYNC_KEYS = {"mr_wallets", "mr_trades", "mr_xaccounts", "mr_handles", "mr_xdiscover", "nv-sound", "luna-picks", "lx-practice"}   # never API keys
+CHAT_CALLS = {"BUY", "SELL", "WATCH", "AVOID"}
+AGREE_ERROR ="To create an account, confirm you're 18 or older and agree to the Terms and Privacy Policy."
+
+
+def legal_values():
+    """Business details for the legal pages and footers. Unset values show a visible placeholder so they get noticed."""
+    import html as _html
+    v = {"LEGAL_NAME": os.environ.get("LUNEX_LEGAL_NAME", "").strip() or "Lunex",
+         "CONTACT_EMAIL": os.environ.get("LUNEX_CONTACT_EMAIL", "").strip() or "[set LUNEX_CONTACT_EMAIL]",
+         "LEGAL_STATE": os.environ.get("LUNEX_LEGAL_STATE", "").strip() or "[set LUNEX_LEGAL_STATE]",
+         "YEAR": time.strftime("%Y")}
+    return {k: _html.escape(s) for k, s in v.items()}
+
+
+def fill_legal(html):
+    for k, s in legal_values().items():
+        html = html.replace("{{" + k + "}}", s)
+    return html
 
 
 def config():
@@ -99,6 +132,21 @@ def init_db():
             expires REAL NOT NULL
         );""")
         payments.migrate(con)
+        if "terms_accepted" not in {r[1] for r in con.execute("PRAGMA table_info(users)")}:
+            # when the user confirmed they're 18+ and accepted the Terms and Privacy Policy (0 = account made before this existed)
+            con.execute("ALTER TABLE users ADD COLUMN terms_accepted REAL DEFAULT 0")
+        con.executescript("""
+        CREATE TABLE IF NOT EXISTS user_data (          -- watchlists, alerts, practice: synced from the browser
+            user_id INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, updated REAL NOT NULL,
+            PRIMARY KEY (user_id, key));
+        CREATE TABLE IF NOT EXISTS chat (               -- community calls
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, pro INTEGER DEFAULT 0,
+            text TEXT NOT NULL, mint TEXT DEFAULT '', sym TEXT DEFAULT '', call TEXT DEFAULT '', price REAL DEFAULT 0, fdv REAL DEFAULT 0,
+            created REAL NOT NULL, hidden INTEGER DEFAULT 0, reports INTEGER DEFAULT 0);
+        CREATE INDEX IF NOT EXISTS chat_created ON chat(created);
+        CREATE TABLE IF NOT EXISTS chat_reports (msg_id INTEGER NOT NULL, user_id INTEGER NOT NULL, PRIMARY KEY (msg_id, user_id));""")
+        live.migrate(con)
+        recap.migrate(con)
 
 
 def hash_password(pw):
@@ -243,10 +291,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_json(payments.public_config())
             return
 
+        # ---- public: no account needed
+        if path == "/api/public/stats":
+            self.send_json(live.public_stats())
+            return
+        if path == "/api/public/feed":
+            try:
+                after = float(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("after", ["0"])[0])
+            except ValueError:
+                after = 0.0
+            self.send_json({"launches": live.feed(after), "live": live.public_stats()["live"]})
+            return
+        if path == "/api/public/check":            # the free rug check
+            if throttled("check:" + self.client_ip(), limit=20, window=60):
+                self.send_json({"error": "That's a lot of checks. Wait a minute and try again."}, 429)
+                return
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                res = live.rug_check(qs.get("q", [""])[0])
+                live.bump("checks_all")
+                self.send_json(res)
+            except ValueError as e:
+                self.send_json({"error": str(e)}, 400)
+            except Exception:
+                self.send_json({"error": "DexScreener didn't answer. Try again in a moment."}, 502)
+            return
+        if path == "/unsubscribe":
+            return self.unsubscribe()
+
         if path in ("/welcome", "/welcome.html"):
             self.isolate = False
-            self.path = "/welcome.html"
-            super().do_GET()
+            self.serve_page("welcome.html")
+            return
+        legal_key = path.removesuffix(".html").rstrip("/")
+        if legal_key in LEGAL_PAGES:                   # /privacy, /terms, /refunds, /cookies: public, no account needed
+            self.isolate = False
+            self.serve_page(LEGAL_PAGES[legal_key])
             return
         if path in PUBLIC_PAGES or path.startswith("/assets/"):
             self.isolate = path not in PUBLIC_PAGES
@@ -268,6 +348,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.isolate = False
             self.serve_app(user, "pay.html")
             return
+        if path in ("/account", "/account.html"):      # account settings
+            self.isolate = False
+            self.serve_app(user, "account.html")
+            return
+        if path == "/api/account":
+            self.send_json(self.account_details(user))
+            return
+        if path == "/api/chat":
+            return self.chat_list(user)
+        if path == "/api/account/recap-preview":       # this week's recap email, as the user would get it
+            with db() as con:
+                _, body, _ = recap.build(con, user)
+            self.isolate = False
+            self.send_html(body)
+            return
+        if path == "/api/account/export":              # everything we hold about this account, as a JSON download
+            data = json.dumps(self.account_export(user), indent=2).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", 'attachment; filename="lunex-account-data.json"')
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path in PRO_FILES and plan_of(user) != "pro":
             if path == "/luna.js":            # free accounts get the upgrade screen instead of Luna
                 self.path = "/luna-locked.js"
@@ -286,7 +390,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with open(os.path.join(HERE, page), encoding="utf-8") as f:
             html = f.read()
         boot = json.dumps(public_user(user)).replace("</", "<\\/")
-        html = html.replace("<head>", f"<head>\n<script>window.LUNEX_USER={boot};</script>", 1)
+        with db() as con:   # the account's saved watchlists/alerts/practice, so they're in place before the app reads them
+            sync = {r["key"]: {"v": r["value"], "t": r["updated"]} for r in con.execute("SELECT key, value, updated FROM user_data WHERE user_id=?", (user["id"],))}
+        sync_js = json.dumps(sync).replace("</", "<\\/")
+        html = fill_legal(html).replace("<head>", f"<head>\n<script>window.LUNEX_USER={boot};window.LUNEX_SYNC={sync_js};</script>", 1)
+        self.send_html(html)
+
+    def serve_page(self, page):
+        # public page with the business details filled in
+        with open(os.path.join(HERE, page), encoding="utf-8") as f:
+            self.send_html(fill_legal(f.read()))
+
+    def send_html(self, html):
         data = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -330,6 +445,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"ok": True}, cookie=f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
             return
 
+        if path == "/unsubscribe":                   # one-click unsubscribe from mail apps (List-Unsubscribe-Post)
+            return self.unsubscribe()
         if path == "/api/stripe/webhook":            # called by Stripe's servers; verified by signature, not by session
             n = int(self.headers.get("Content-Length", 0) or 0)
             payload = self.rfile.read(n) if n <= 500000 else b""
@@ -416,6 +533,63 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 con.execute("UPDATE users SET wallet=? WHERE id=?", (w, user["id"]))
             self.send_json({"ok": True, "wallet": w})
             return
+        if path == "/api/account/delete":
+            return self.api_delete_account(user)
+        if path == "/api/account/profile":
+            name = str((self.read_json() or {}).get("name", "")).strip()[:60]
+            if not name:
+                self.send_json({"error": "Enter a name."}, 400)
+                return
+            with _db_lock, db() as con:
+                con.execute("UPDATE users SET name=? WHERE id=?", (name, user["id"]))
+            self.send_json({"ok": True, "name": name})
+            return
+        if path == "/api/account/password":
+            return self.api_password(user)
+        if path == "/api/sync":
+            return self.api_sync(user)
+        if path == "/api/chat":
+            return self.chat_post(user)
+        if path == "/api/chat/report":
+            return self.chat_report(user)
+        if path == "/api/chat/delete":
+            mid = int((self.read_json() or {}).get("id") or 0)
+            with _db_lock, db() as con:
+                n = con.execute("DELETE FROM chat WHERE id=? AND user_id=?", (mid, user["id"])).rowcount
+            self.send_json({"ok": bool(n)})
+            return
+        if path == "/api/practice/log":               # counts practice trades for the public stats
+            if not throttled(f"practice:{user['id']}", limit=30, window=60):
+                live.bump("practice_all")
+            self.send_json({"ok": True})
+            return
+        if path == "/api/account/recap":
+            on = 1 if (self.read_json() or {}).get("on") else 0
+            with _db_lock, db() as con:
+                con.execute("UPDATE users SET recap_opt=? WHERE id=?", (on, user["id"]))
+            self.send_json({"ok": True, "on": bool(on)})
+            return
+        if path == "/api/account/recap-test":
+            if not recap.configured():
+                self.send_json({"error": "Email isn't set up on this server yet, so nothing can be sent. Use Preview to see it."}, 400)
+                return
+            if throttled(f"recap:{user['id']}", limit=3, window=3600):
+                self.send_json({"error": "You've sent a few test emails already. Try again in an hour."}, 429)
+                return
+            try:
+                with db() as con:
+                    recap.send_to(con, user)
+                self.send_json({"ok": True})
+            except Exception as e:
+                self.send_json({"error": f"Sending failed: {e}"}, 502)
+            return
+        if path == "/api/account/signout-others":
+            tok = self.session_token() or ""
+            with _db_lock, db() as con:
+                n = con.execute("DELETE FROM sessions WHERE user_id=? AND token_hash<>?",
+                                (user["id"], hashlib.sha256(tok.encode()).hexdigest())).rowcount
+            self.send_json({"ok": True, "removed": n})
+            return
         if path == "/rpc":
             return self.relay_rpc()
         self.send_error(404)
@@ -432,10 +606,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if len(pw) < 8:
             self.send_json({"error": "Use a password with at least 8 characters."}, 400)
             return
+        if b.get("agree") is not True:
+            self.send_json({"error": AGREE_ERROR}, 400)
+            return
         try:
             with _db_lock, db() as con:
-                cur = con.execute("INSERT INTO users (email, name, pw_hash, created) VALUES (?,?,?,?)",
-                                  (email, name, hash_password(pw), time.time()))
+                cur = con.execute("INSERT INTO users (email, name, pw_hash, created, terms_accepted) VALUES (?,?,?,?,?)",
+                                  (email, name, hash_password(pw), time.time(), time.time()))
                 uid = cur.lastrowid
         except sqlite3.IntegrityError:
             self.send_json({"error": "There's already an account with that email. Sign in instead."}, 409)
@@ -466,7 +643,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if throttled(self.client_ip()):
             self.send_json({"error": "Too many attempts. Wait a few minutes."}, 429)
             return
-        cred = str((self.read_json() or {}).get("credential", ""))
+        b = self.read_json() or {}
+        cred, agree = str(b.get("credential", "")), b.get("agree") is True
         try:
             url = "https://oauth2.googleapis.com/tokeninfo?id_token=" + urllib.parse.quote(cred)
             with urllib.request.urlopen(url, timeout=10) as r:
@@ -485,11 +663,172 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if u:
                 con.execute("UPDATE users SET google_sub=?, name=COALESCE(NULLIF(name,''),?) WHERE id=?", (sub, name, u["id"]))
                 uid = u["id"]
+            elif not agree:                          # a new account: needs the 18+ / Terms box ticked first
+                self.send_json({"error": AGREE_ERROR, "needsAgree": True}, 400)
+                return
             else:
-                uid = con.execute("INSERT INTO users (email, name, google_sub, created) VALUES (?,?,?,?)",
-                                  (email, name, sub, time.time())).lastrowid
+                uid = con.execute("INSERT INTO users (email, name, google_sub, created, terms_accepted) VALUES (?,?,?,?,?)",
+                                  (email, name, sub, time.time(), time.time())).lastrowid
             u = con.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
         self.send_json({"user": public_user(u)}, cookie=self.start_session(uid))
+
+    def account_details(self, user):
+        with db() as con:
+            pays = con.execute("SELECT method, plan, usd, days, created, proof FROM payments WHERE user_id=? ORDER BY created DESC LIMIT 50",
+                               (user["id"],)).fetchall()
+            sessions = con.execute("SELECT COUNT(*) FROM sessions WHERE user_id=? AND expires>?", (user["id"], time.time())).fetchone()[0]
+        return {"user": public_user(user), "created": user["created"], "termsAccepted": user["terms_accepted"] or 0,
+                "recapOn": bool(user["recap_opt"]), "mailReady": recap.configured(),
+                "hasPassword": bool(user["pw_hash"]), "sessions": sessions, "plans": payments.public_config()["plans"],
+                "payments": [{"method": p["method"], "plan": p["plan"], "usd": p["usd"], "days": p["days"], "created": p["created"],
+                              "proof": "" if p["proof"].startswith(("sub-start:", "inv:")) else p["proof"]} for p in pays]}
+
+    def account_export(self, user):
+        with db() as con:
+            pays = [dict(r) for r in con.execute("SELECT method, plan, usd, days, created, proof FROM payments WHERE user_id=?", (user["id"],))]
+        iso = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t)) if t else None
+        return {"exported": iso(time.time()), "account": {
+            "email": user["email"], "name": user["name"], "wallet": user["wallet"], "plan": plan_of(user),
+            "pro_until": iso(user["pro_until"]), "created": iso(user["created"]), "terms_accepted": iso(user["terms_accepted"]),
+            "sign_in_methods": [m for m, on in (("password", user["pw_hash"]), ("google", user["google_sub"])) if on],
+            "card_customer": bool(user["stripe_customer"])},
+            "payments": [{**p, "created": iso(p["created"])} for p in pays],
+            "note": "Watchlists, alert settings, tracked wallets and API keys are stored only in your browser, not on Lunex's servers."}
+
+    def api_password(self, user):
+        if throttled(self.client_ip()):
+            self.send_json({"error": "Too many attempts. Wait a few minutes."}, 429)
+            return
+        b = self.read_json() or {}
+        cur, new = str(b.get("current", "")), str(b.get("new", ""))
+        if user["pw_hash"] and not check_password(cur, user["pw_hash"]):
+            self.send_json({"error": "Your current password is wrong."}, 400)
+            return
+        if len(new) < 8:
+            self.send_json({"error": "Use a new password with at least 8 characters."}, 400)
+            return
+        tok = self.session_token() or ""
+        with _db_lock, db() as con:
+            con.execute("UPDATE users SET pw_hash=? WHERE id=?", (hash_password(new), user["id"]))
+            # a new password signs out every other device
+            con.execute("DELETE FROM sessions WHERE user_id=? AND token_hash<>?", (user["id"], hashlib.sha256(tok.encode()).hexdigest()))
+        self.send_json({"ok": True})
+
+    # ------------------------------------------------------------ synced browser data (watchlists, alerts, practice)
+    def api_sync(self, user):
+        b = self.read_json(limit=400000) or {}
+        items = b.get("items") if isinstance(b.get("items"), dict) else {}
+        bad = [k for k in items if k not in SYNC_KEYS]
+        if bad or not items:
+            self.send_json({"error": "Nothing to save."}, 400)
+            return
+        now = time.time()
+        with _db_lock, db() as con:
+            for k, v in items.items():
+                if v is None:
+                    con.execute("DELETE FROM user_data WHERE user_id=? AND key=?", (user["id"], k))
+                elif isinstance(v, str) and len(v) <= 150000:
+                    con.execute("INSERT INTO user_data VALUES (?,?,?,?) ON CONFLICT(user_id, key) DO UPDATE SET value=excluded.value, updated=excluded.updated",
+                                (user["id"], k, v, now))
+        self.send_json({"ok": True, "t": now})
+
+    # ------------------------------------------------------------ community calls
+    def chat_list(self, user):
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        try:
+            after = int(qs.get("after", ["0"])[0])
+        except ValueError:
+            after = 0
+        with db() as con:
+            if after:
+                rows = con.execute("SELECT * FROM chat WHERE id>? AND hidden=0 ORDER BY id LIMIT 100", (after,)).fetchall()
+            else:
+                rows = con.execute("SELECT * FROM (SELECT * FROM chat WHERE hidden=0 ORDER BY id DESC LIMIT 80) ORDER BY id").fetchall()
+            gone = [r[0] for r in con.execute("SELECT id FROM chat WHERE hidden=1 AND created>?", (time.time() - 86400,))]
+        self.send_json({"messages": [{"id": r["id"], "name": r["name"], "pro": bool(r["pro"]), "text": r["text"], "mint": r["mint"],
+                                      "sym": r["sym"], "call": r["call"], "price": r["price"], "fdv": r["fdv"], "t": r["created"],
+                                      "mine": r["user_id"] == user["id"]} for r in rows], "hidden": gone})
+
+    def chat_post(self, user):
+        b = self.read_json() or {}
+        text = re.sub(r"\s+", " ", str(b.get("text", ""))).strip()[:280]
+        mint, call = str(b.get("mint", "")).strip(), str(b.get("call", "")).strip().upper()
+        if mint and not SOL_ADDR.match(mint):
+            self.send_json({"error": "That isn't a valid Solana contract address."}, 400)
+            return
+        if call and call not in CHAT_CALLS:
+            call = ""
+        if not text and not mint:
+            self.send_json({"error": "Write something or attach a coin."}, 400)
+            return
+        if len(text.split()) >= 12 and all(w.isalpha() and w.islower() for w in text.split()[:12]):
+            self.send_json({"error": "That looks like a seed phrase, so it wasn't posted. Never share one, anywhere."}, 400)
+            return
+        if throttled(f"chat:{user['id']}", limit=1, window=6) or throttled(f"chath:{user['id']}", limit=40, window=3600):
+            self.send_json({"error": "Slow down a little. One message every few seconds."}, 429)
+            return
+        sym, price, fdv = "", 0.0, 0.0
+        if mint:
+            got = live.price_of(mint)                  # stamp the price at the moment of the call
+            if got:
+                sym, price, fdv = got
+        name = (user["name"] or user["email"].split("@")[0])[:40]
+        with _db_lock, db() as con:
+            mid = con.execute("INSERT INTO chat (user_id, name, pro, text, mint, sym, call, price, fdv, created) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                              (user["id"], name, 1 if plan_of(user) == "pro" else 0, text, mint, sym, call if mint else "", price, fdv, time.time())).lastrowid
+        if mint and call:
+            live.bump("calls_all")
+        self.send_json({"ok": True, "id": mid})
+
+    def chat_report(self, user):
+        mid = int((self.read_json() or {}).get("id") or 0)
+        with _db_lock, db() as con:
+            try:
+                con.execute("INSERT INTO chat_reports VALUES (?, ?)", (mid, user["id"]))
+                con.execute("UPDATE chat SET reports = reports + 1, hidden = CASE WHEN reports + 1 >= 3 THEN 1 ELSE hidden END WHERE id=?", (mid,))
+            except sqlite3.IntegrityError:
+                pass
+        self.send_json({"ok": True})
+
+    def unsubscribe(self):
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        try:
+            uid = int(qs.get("u", ["0"])[0])
+        except ValueError:
+            uid = 0
+        ok = uid and recap.check_unsub(uid, qs.get("t", [""])[0])
+        if ok:
+            with _db_lock, db() as con:
+                con.execute("UPDATE users SET recap_opt=0 WHERE id=?", (uid,))
+        self.isolate = False
+        msg = ("You're unsubscribed from the weekly recap. You can turn it back on any time in Account settings."
+               if ok else "That unsubscribe link isn't valid. Turn the recap off in Account settings instead.")
+        self.send_html(fill_legal(f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weekly recap · Lunex</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/legal.css"></head>
+<body><main><p class="eyebrow">Email</p><h1>{'Unsubscribed.' if ok else 'Link not valid.'}</h1><p>{msg}</p><p><a href="/">Open Lunex</a></p></main></body></html>"""))
+
+    def api_delete_account(self, user):
+        """Permanently delete the signed-in account. The user types their email to confirm.
+        Card subscriptions are cancelled first so nobody keeps getting charged for a deleted account.
+        Payment records (amount, date, transaction id) are kept without the account, for tax and accounting."""
+        b = self.read_json() or {}
+        if str(b.get("confirm", "")).strip().lower() != user["email"].lower():
+            self.send_json({"error": "Type your account email exactly to confirm."}, 400)
+            return
+        if user["stripe_customer"]:
+            try:
+                payments.stripe_cancel_all(user["stripe_customer"])
+            except ValueError as e:
+                self.send_json({"error": f"Couldn't cancel your card subscription, so nothing was deleted. Try again or email {legal_values()['CONTACT_EMAIL']}. ({e})"}, 502)
+                return
+        with _db_lock, db() as con:
+            con.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
+            con.execute("DELETE FROM invoices WHERE user_id=?", (user["id"],))
+            con.execute("DELETE FROM user_data WHERE user_id=?", (user["id"],))
+            con.execute("DELETE FROM chat_reports WHERE user_id=?", (user["id"],))
+            con.execute("DELETE FROM chat WHERE user_id=?", (user["id"],))
+            con.execute("DELETE FROM users WHERE id=?", (user["id"],))
+        self.send_json({"ok": True}, cookie=f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
 
     def relay_rpc(self):
         n = int(self.headers.get("Content-Length", 0) or 0)
@@ -536,6 +875,9 @@ def admin(argv):
         elif argv[0] in ("pro", "free") and len(argv) > 1:
             n = con.execute("UPDATE users SET plan=?" + (", pro_until=0" if argv[0] == "free" else "") + " WHERE email=?", (argv[0], argv[1].lower())).rowcount
             print(f"{argv[1]} is now {argv[0].upper()}" if n else f"No account with email {argv[1]}")
+        elif argv[0] == "chat-hide" and len(argv) > 1:
+            n = con.execute("UPDATE chat SET hidden=1 WHERE id=?", (int(argv[1]),)).rowcount
+            print(f"Message {argv[1]} hidden" if n else f"No message {argv[1]}")
         else:
             print(__doc__)
 
@@ -546,5 +888,7 @@ if __name__ == "__main__":
         admin(sys.argv[1:])
         sys.exit(0)
     init_db()
+    live.start(db)
+    recap.start(db, legal_values)
     print(f"Lunex running on {BIND}:{PORT}" + ("" if HOSTED else f"  ->  http://localhost:{PORT}"), flush=True)
     http.server.ThreadingHTTPServer((BIND, PORT), Handler).serve_forever()

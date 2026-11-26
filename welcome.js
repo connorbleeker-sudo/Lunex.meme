@@ -44,8 +44,10 @@ $('#emailForm').addEventListener('submit', async e => {
   const email = f.email.value.trim(), password = f.password.value, name = f.name.value.trim();
   if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Enter a valid email address.'; return; }
   if (password.length < 8) { err.textContent = 'Use a password with at least 8 characters.'; return; }
+  const agree = $('#agree').checked;
+  if (mode === 'signup' && !agree) { err.textContent = "To create an account, confirm you're 18 or older and agree to the Terms and Privacy Policy."; $('#agree').focus(); return; }
   btn.disabled = true; err.textContent = '';
-  try { const { user } = await api(mode === 'signup' ? '/api/signup' : '/api/login', { email, password, name }); signedIn(user); }
+  try { const { user } = await api(mode === 'signup' ? '/api/signup' : '/api/login', { email, password, name, agree }); signedIn(user); }
   catch (x) { err.textContent = x.message; if (/already an account/.test(x.message)) setMode('signin'); }
   finally { btn.disabled = false; }
 });
@@ -62,8 +64,9 @@ async function setupGoogle() {
     client_id: cid,
     callback: async res => {
       $('#err').textContent = '';
-      try { const { user } = await api('/api/google', { credential: res.credential }); signedIn(user); }
-      catch (x) { $('#err').textContent = x.message; }
+      // a new Google account needs the 18+ / Terms box ticked (only shown on "Create account"); existing accounts just sign in
+      try { const { user } = await api('/api/google', { credential: res.credential, agree: mode === 'signup' && $('#agree').checked }); signedIn(user); }
+      catch (x) { if (/18 or older/.test(x.message)) { setMode('signup'); $('#agree').focus(); } $('#err').textContent = x.message; }
     },
   });
   google.accounts.id.renderButton($('#gbtn'), { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', width: 360 });
@@ -89,7 +92,13 @@ $('#skipWallet').addEventListener('click', () => { location.href = '/'; });
 // ---------------------------------------------------------------- signed in already?
 $('#signOut').addEventListener('click', async () => { await api('/api/logout', {}).catch(() => { }); me = null; $('#topAction').textContent = 'Sign in'; show('signin'); });
 (async () => {
-  setMode(new URLSearchParams(location.search).get('mode') === 'signup' ? 'signup' : 'signin');
+  const qs = new URLSearchParams(location.search);
+  setMode(qs.get('mode') === 'signup' ? 'signup' : 'signin');
+  if (qs.get('deleted')) {
+    const n = document.createElement('p'); n.className = 'notice'; n.setAttribute('role', 'status');
+    n.textContent = 'Your account has been deleted.';
+    $('[data-pane="signin"]').prepend(n);
+  }
   try {
     const { user } = await api('/api/me');
     if (user) {
@@ -104,7 +113,10 @@ $('#signOut').addEventListener('click', async () => { await api('/api/logout', {
 $('#topAction').addEventListener('click', () => { if (me) location.href = '/'; });
 // show the live Pro price (set on the server)
 api('/api/pay/config').then(c => {
-  const w = (c.plans || []).find(p => p.id === 'week'); const el = document.querySelector('.plan.pro .price');
-  if (w && el) el.innerHTML = `$${w.usd % 1 ? w.usd.toFixed(2) : w.usd}<span>/week</span>`;
+  const money = n => '$' + (n % 1 ? n.toFixed(2) : n);
+  const m = (c.plans || []).find(p => p.id === 'month'), w = (c.plans || []).find(p => p.id === 'week');
+  const el = document.querySelector('#proPrice'), sub = document.querySelector('#proPriceSub');
+  if (m && el) el.innerHTML = `${money(m.usd)}<span>/month</span>`;
+  if (m && sub) { const day = m.usd / m.days; sub.textContent = `About ${day < 1 ? Math.round(day * 100) + '¢' : money(+day.toFixed(2))} a day${w ? ` · or ${money(w.usd)} for a single week` : ''}`; }
 }).catch(() => { });
 })();

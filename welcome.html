@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lunex: sign in</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="description" content="Lunex scores every pump.fun launch live. Sign in to open the radar, track wallets and get Luna's buy and sell calls.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -46,10 +47,11 @@
           <label class="field only-signup" hidden>Name<input name="name" autocomplete="name" placeholder="What should Luna call you?"></label>
           <label class="field">Email<input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
           <label class="field">Password<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters"></label>
+          <label class="agree only-signup" hidden><input type="checkbox" name="agree" id="agree"><span>I'm 18 or older and I agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
           <p class="err" id="err" role="alert"></p>
           <button class="btn primary wide" type="submit" id="submitBtn">Sign in</button>
         </form>
-        <p class="fine">By continuing you agree that Lunex shows trading signals, not financial advice.</p>
+        <p class="fine">Lunex shows trading signals, not financial advice. <a href="/terms" target="_blank" rel="noopener">Terms</a> · <a href="/privacy" target="_blank" rel="noopener">Privacy</a></p>
       </div>
 
       <!-- wallet step -->
@@ -77,6 +79,40 @@
     </div>
   </section>
 
+  <!-- ===== live numbers (real, counted by the server) ===== -->
+  <section class="stats-strip" aria-label="Lunex live numbers">
+    <div><b data-stat="launchesAll">—</b><span>launches scanned<small data-stat-since></small></span></div>
+    <div><b data-stat="launches24h">—</b><span>new launches in the last 24 hours</span></div>
+    <div><b data-stat="checksAll">—</b><span>free rug checks run</span></div>
+    <div><b data-stat="callsAll">—</b><span>community calls posted</span></div>
+  </section>
+
+  <!-- ===== free rug check ===== -->
+  <section class="check" id="check" aria-labelledby="check-h">
+    <div class="check-copy">
+      <p class="kicker">FREE · NO ACCOUNT NEEDED</p>
+      <h2 id="check-h">Is it a rug? <em>Check any coin.</em></h2>
+      <p>Paste a Solana contract address or a $ticker. Lunex runs the same checks as the dashboard: buy pressure, liquidity, age, socials and price action, scored in seconds.</p>
+      <form class="check-form" id="checkForm" autocomplete="off">
+        <label class="sr" for="checkQ">Contract address or ticker</label>
+        <input id="checkQ" name="q" spellcheck="false" placeholder="Paste a contract address or $TICKER" maxlength="60">
+        <button class="btn primary" type="submit">Check it</button>
+      </form>
+      <p class="check-try">Try: <button type="button" data-try="BONK">$BONK</button><button type="button" data-try="WIF">$WIF</button><button type="button" data-try="POPCAT">$POPCAT</button></p>
+    </div>
+    <div class="check-stage" aria-live="polite">
+      <div class="check-luna" id="checkLuna"></div>
+      <div class="check-out" id="checkOut"><p class="check-idle">Luna's waiting for a coin. Paste one on the left.</p></div>
+    </div>
+  </section>
+
+  <!-- ===== live launch feed ===== -->
+  <section class="feed" aria-labelledby="feed-h">
+    <div class="feed-head"><div><p class="kicker"><span class="live-dot" id="feedDot"></span>LIVE FROM PUMP.FUN</p><h2 id="feed-h">New coins, <em>as they launch.</em></h2></div>
+      <p>Every new pump.fun coin hits Lunex about a second after it mints. Most fail within the hour. The dashboard scores each one and flags the red flags.</p></div>
+    <ol class="feed-list" id="feedList"><li class="feed-empty">Connecting to pump.fun…</li></ol>
+  </section>
+
   <!-- ===== Luna, the Pro feature ===== -->
   <section class="luna" id="luna">
     <div class="luna-copy">
@@ -98,7 +134,8 @@
 
   <!-- ===== pricing ===== -->
   <section class="pricing" id="pricing">
-    <h2>Free to watch. <em>Pro to win.</em></h2>
+    <h2>Free to watch. <em>Pro to act.</em></h2>
+    <p class="pricing-sub">The radar is free forever. Pro adds Luna, who turns the data into a call and a plan you can act on.</p>
     <div class="plans">
       <div class="plan">
         <h3>Free</h3>
@@ -113,16 +150,20 @@
         <button type="button" class="btn ghost wide" data-go="signup">Create free account</button>
       </div>
       <div class="plan pro">
+        <p class="plan-badge">Best value</p>
         <h3>Pro</h3>
-        <p class="price">$20<span>/week</span></p>
+        <p class="price" id="proPrice">$20<span>/month</span></p>
+        <p class="price-sub" id="proPriceSub">About 67¢ a day · or $7 for a single week</p>
         <ul>
           <li><b>Everything in Free</b></li>
-          <li><b>Luna AI:</b> buy, skip and sell calls on any coin</li>
-          <li>Exact money plans sized to your wallet</li>
-          <li>Trade for me: best setup, one tap, your approval</li>
-          <li>Ask her anything, crypto or not</li>
+          <li><b>Luna AI:</b> a buy, skip or sell call on any coin, with a confidence score and the reasons</li>
+          <li><b>Money plans:</b> how much to put in, where to take profit, where to cut, sized to your wallet</li>
+          <li><b>Trade for me:</b> her best setup in one tap, approved in your own wallet</li>
+          <li><b>Private:</b> Luna runs on your device, so your questions stay with you</li>
+          <li><b>Ask her anything,</b> crypto or not</li>
         </ul>
-        <button type="button" class="btn primary wide" data-go="signup">Start with Pro</button>
+        <button type="button" class="btn primary wide" data-go="signup">Unlock Luna</button>
+        <p class="plan-note">Pay in USDC, SOL or card. Crypto passes never renew by themselves. Card plans renew monthly and you can cancel anytime from Manage billing. Signals, not financial advice.</p>
       </div>
     </div>
   </section>
@@ -130,10 +171,13 @@
 
 <footer class="foot">
   <span class="brand small"><span class="orb"></span>Lun<em>ex</em></span>
-  <span>Data from DexScreener, PumpPortal and the Solana RPC</span>
-  <span>Signals, not financial advice</span>
+  <nav class="foot-links" aria-label="Legal"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a><a href="/cookies">Cookies</a></nav>
+  <span>© {{YEAR}} {{LEGAL_NAME}} · United States · <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></span>
+  <span>Data from DexScreener, PumpPortal and the Solana RPC · Signals, not financial advice</span>
 </footer>
 
+<script src="lunex-ui.js"></script>
 <script src="welcome.js"></script>
+<script src="welcome-live.js"></script>
 </body>
 </html>
