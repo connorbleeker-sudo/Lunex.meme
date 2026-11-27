@@ -12,27 +12,28 @@ const money = n => '$' + (n % 1 ? n.toFixed(2) : n);
 const perDay = () => Math.round(price.month / 30 * 100) + '¢';
 const ctaText = () => `Unlock Luna · ${money(price.month)}/month`;
 
+const CLOUD = !!(window.LUNEX_USER && window.LUNEX_USER.lunaCloud);   // Luna answers with Claude through the server
 // ---------------------------------------------------------------- example conversations (cycled in the demo)
 const DEMOS = [
-  { q: 'is $TEEETHY a good buy?', call: 'BUY', cls: 'buy', conf: 84,
+  { q: 'is $TEEETHY a good buy?', call: 'BUY', cls: 'buy', pass: 5,
     why: '<b>Yes, buy $TEEETHY.</b> Passes 5/6 checks: buyers in control, momentum building, safety 65+.',
     plan: '<b>The play:</b> $40 at $56.4K market cap.<br>Take profit at <b>$112.8K</b> (2x): <b class="up">+$40</b><br>Stop at <b>$33.9K</b> (−40%): <b class="down">−$16</b>' },
-  { q: 'what about $MOONCAT?', call: 'SKIP', cls: 'skip', conf: 86,
+  { q: 'what about $MOONCAT?', call: 'SKIP', cls: 'skip', pass: 2,
     why: '<b>Skip $MOONCAT.</b> Fails 4/6: the dev already sold, buys aren\'t beating sells, no socials.',
     plan: 'Nothing to buy here. I\'ll flag it if the picture changes.' },
-  { q: 'should I sell my $GLORP? up 2.3x', call: 'SELL HALF', cls: 'small', conf: 81,
+  { q: 'should I sell my $GLORP? up 2.3x', call: 'SELL HALF', cls: 'small',
     why: '<b>Take your initial out.</b> You\'re past your 2x target, so selling half makes the rest free.',
     plan: '<b>Then:</b> move your stop up to break-even and let the house money ride.' },
 ];
 
 const demoHtml = d => `
   <div class="lk-msg me">${esc(d.q)}</div>
-  <div class="lk-msg bot"><div class="ld-verdict v-${d.cls}"><b>${d.call}</b><span>${d.conf}% confidence</span></div>
+  <div class="lk-msg bot"><div class="ld-verdict v-${d.cls}"><b>${d.call}</b><span>${d.pass != null ? `Passes ${d.pass}/6 checks` : 'Your 2x rule'}</span></div>
     <p>${d.why}</p><p class="lk-plan">${d.plan}</p></div>`;
 
 // ---------------------------------------------------------------- the Luna tab
 const FEATS = [
-  ['◎', 'Straight calls', 'BUY, SMALL BUY, WAIT or SKIP on any coin or fresh launch, with a confidence score and the reasons in one line.'],
+  ['◎', 'Straight calls', 'BUY, SMALL BUY, WAIT or SKIP on any coin or fresh launch, with how many of her six checks it passes and the reasons in one line.'],
   ['$', 'Money plans', 'How much to put in for your wallet size, the exact take-profit price at 2x and the stop at −40%.'],
   ['⚡', 'Trade for me', 'Her best setup right now, ticket opened and sized for you. You approve it in your own wallet.'],
   ['↘', 'When to sell', 'Paste a coin you hold and she checks it against your rules: take profit, hold, or cut.'],
@@ -44,8 +45,8 @@ const PUMP_CHECKS = ['Dev still holding', 'Real buyers arriving', 'Buys beating 
 const FAQ = [
   ['Is Luna financial advice?', 'No. Luna turns live market data into a clear call and a plan, but she can be wrong, and most new memecoins go to zero. Only trade what you can afford to lose.'],
   ['Can Luna move my money?', 'Never. Lunex never holds your keys. "Trade for me" opens a ticket, and nothing happens until you approve it in your own wallet.'],
-  ['Where does Luna run?', 'On your own device. Her AI model downloads to your browser the first time, so what you ask her stays with you.'],
-  ['How do I pay, and does it renew?', 'Pay in USDC, SOL or by card. Crypto passes never renew by themselves. Card plans renew monthly and you can cancel anytime from Account settings.'],
+  ['Where does Luna run?', CLOUD ? 'Luna answers with Claude, an AI by Anthropic, through the Lunex server: your question and the wallet or coin data she looks up go there to answer you. If that is not available, a smaller AI runs on your own device instead.' : 'On your own device. Her AI model downloads to your browser the first time, so what you ask her stays with you.'],
+  ['How do I pay, and does it renew?', 'Pay in USDC, SOL or by card. Crypto passes never renew by themselves. Card plans renew each week or month, depending on the plan you pick, and you can cancel anytime from Account settings.'],
   ['What happens if I cancel?', 'You keep Pro until the end of the time you paid for, then Luna locks again. The radar, launches, wallets and alerts stay free.'],
 ];
 
@@ -57,10 +58,10 @@ function drawPage() {
       <div class="lk-copy">
         <span class="lk-eyebrow"><i>★</i> PRO · LUNA AI</span>
         <h1>Luna tells you <em>what to do.</em></h1>
-        <p class="lk-lede">The radar shows you what's moving. Luna tells you what to do about it: a <b>straight call</b> on any coin, a <b>confidence score</b>, and <b>the exact plan</b>. How much to put in, where to take profit, where to cut. Sized to your wallet.</p>
+        <p class="lk-lede">The radar shows you what's moving. Luna tells you what to do about it: a <b>straight call</b> on any coin, <b>how many of her six checks</b> it passes, and <b>the exact plan</b>. How much to put in, where to take profit, where to cut. Sized to your wallet.</p>
         <div class="lk-cta"><button type="button" class="lk-up lk-main">${ctaText()}</button><a class="lk-ghost" href="#lk-how">How she decides ↓</a></div>
         <p class="lk-price"><span data-price="day">About ${perDay()} a day</span> · <span data-price="week">or ${money(price.week)} for one week</span> · cancel anytime</p>
-        <ul class="lk-trust"><li>You approve every trade</li><li>Runs on your device</li><li>Never asks for your keys</li></ul>
+        <ul class="lk-trust"><li>You approve every trade</li><li>Not financial advice</li><li>Never asks for your keys</li></ul>
       </div>
       <div class="lk-demo" aria-label="Example conversations with Luna">
         <div class="lk-demo-top"><span class="lk-dot"></span><b>Luna</b><small>Example conversation</small><span class="lk-demo-dots">${DEMOS.map((_, i) => `<i data-i="${i}"></i>`).join('')}</span></div>
@@ -187,7 +188,7 @@ const tele = q('.ov-telemetry');
 if (tele) {
   const sec = document.createElement('div'); sec.className = 'ov-meet lk-home';
   sec.innerHTML = `<div class="lk-copy"><span class="lk-eyebrow"><i>★</i> PRO · LUNA AI</span><h2>The radar shows what's moving. <em>Luna tells you what to do.</em></h2>
-    <ul class="lk-chips"><li>Buy / skip / sell calls</li><li>Exact take-profit &amp; stop</li><li>Trade for me</li><li>Runs on your device</li></ul>
+    <ul class="lk-chips"><li>Buy / skip / sell calls</li><li>Exact take-profit &amp; stop</li><li>Trade for me</li><li>Knows your trades</li></ul>
     <div class="lk-cta"><button type="button" class="lk-up lk-main">${ctaText()}</button><button type="button" class="lk-ghost" data-open-luna>See what she does</button></div>
     <p class="lk-price"><span data-price="day">About ${perDay()} a day</span> · cancel anytime</p></div>
     <div class="lk-chat lk-static" aria-label="Example conversation with Luna">${demoHtml(DEMOS[0])}</div>`;

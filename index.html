@@ -312,7 +312,7 @@
       <span class="legend">Stop at</span><select id="tSL"><option value="25">−25%</option><option value="40" selected>−40%</option><option value="50">−50%</option><option value="0">none</option></select>
       <button id="tAdd">Watch</button>
     </div>
-    <div id="tList" style="margin-top:10px"><p class="legend">Add a coin you bought. Lunex checks it every 15 seconds and alerts you (banner + sound + desktop notification) the moment it hits your target or your stop. Turn on alerts at the top.</p></div>
+    <div id="tList" style="margin-top:10px"><p class="legend">Add a coin you bought. Lunex checks it every 15 seconds and alerts you (banner + sound + desktop notification) when it hits your target or your stop. Alerts only work while Lunex is open in a tab, so do not rely on them as a real stop-loss. Turn on alerts at the top.</p></div>
   </div>
   <div class="controls" style="align-items:center">
     <button id="connectWallet" style="font-size:15px;padding:10px 18px"><i class="ic ic-wallet"></i> Connect wallet</button>
@@ -321,7 +321,7 @@
     <input id="myAddr" placeholder="Your PUBLIC Solana wallet address" size="46">
     <button class="ghost" id="loadMine">Check positions</button>
   </div>
-  <div class="note warn"><i class="ic ic-lock"></i> <b>Connect wallet</b> uses the same wallet you log into pump.fun with (Phantom, Solflare, or Backpack). It only reads your <b>public address</b>. Lunex never asks you to sign or approve anything. <b>Never</b> type your private key or seed phrase into any site, bot, or DM, including this one. Anyone who asks for it is trying to drain you.</div>
+  <div class="note warn"><i class="ic ic-lock"></i> <b>Connect wallet</b> uses the same wallet you log into pump.fun with (Phantom, Solflare, or Backpack). Connecting only reads your <b>public address</b>. Your wallet only asks you to approve something when you choose to trade or pay, and you see every detail first. <b>Never</b> type your private key or seed phrase into any site, bot, or DM, including this one. Anyone who asks for it is trying to drain you.</div>
   <div id="mineSummary"></div>
   <div id="mineGrid" class="grid"></div>
 </section>
@@ -825,7 +825,7 @@ async function pollTrades() {
 
 function drawTrades() {
   const trades = getTrades();
-  if (!trades.length) { $('#tList').innerHTML = '<p class="legend">Add a coin you bought. Lunex checks it every 15 seconds and alerts you (banner + sound + desktop notification) the moment it hits your target or your stop. Turn on alerts at the top.</p>'; return; }
+  if (!trades.length) { $('#tList').innerHTML = '<p class="legend">Add a coin you bought. Lunex checks it every 15 seconds and alerts you (banner + sound + desktop notification) when it hits your target or your stop. Alerts only work while Lunex is open in a tab, so do not rely on them as a real stop-loss. Turn on alerts at the top.</p>'; return; }
   $('#tList').innerHTML = `<table><tr><th>Coin</th><th>Entry MC</th><th>Now</th><th>Multiple</th><th>Target / Stop</th><th>Status</th><th></th></tr>${trades.map(t => {
     const live = tradeLive[t.mint], x = live ? live.mcap / t.entry : null;
     const status = t.hit === 'tp' ? '<b class="up"><i class="ic ic-target"></i> TARGET HIT</b>' : t.hit === 'sl' ? '<b class="down"><i class="ic ic-stop"></i> STOP HIT</b>' : '<span class="sub">watching…</span>';

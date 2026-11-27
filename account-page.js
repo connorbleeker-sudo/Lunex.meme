@@ -40,10 +40,10 @@ function drawPlan() {
   const u = D.user, el = $('#plan');
   const month = (D.plans || []).find(p => p.id === 'month'), week = (D.plans || []).find(p => p.id === 'week');
   const perks = `<ul class="perks">
-      <li><b>Buy, skip or sell calls</b>on any coin, with a confidence score</li>
+      <li><b>Buy, skip or sell calls</b>on any coin, with the checks it passes</li>
       <li><b>Money plans</b>with exact take-profit and stop numbers</li>
       <li><b>Trade for me</b>her best setup in one tap, approved in your wallet</li>
-      <li><b>Private</b>Luna runs on your device</li></ul>`;
+      <li><b>Knows your trades</b>Luna reads your wallet's recent trades</li></ul>`;
   if (u.plan !== 'pro') {
     el.className = 'card plan-hero is-free';
     el.innerHTML = `<div class="ph-top"><div><span class="pill free">Free plan</span>

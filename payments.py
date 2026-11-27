@@ -138,7 +138,7 @@ def create_invoice(con, user_id, plan_id, currency):
         raw = round(p["usd"] * 1_000_000)                        # USDC has 6 decimals
     elif currency == "sol":
         px = sol_price()
-        if not px:
+        if not px or time.time() - _sol["at"] > 300:      # never price a payment from an old SOL price
             raise ValueError("Couldn't get the SOL price right now. Try USDC or try again.")
         raw = math.ceil(p["usd"] / px * 1_000_000_000)           # lamports
     else:
@@ -183,7 +183,7 @@ def verify_payment(con, user_id, ref, signature, rpc):
     # a payment belongs to this invoice if it carries our memo (wallet button) or our reference key (QR / Solana Pay)
     if reference_for(ref) not in keys and not any(m.strip().endswith("lunex:" + ref) for m in _memos(tx)):
         return "error", "That transaction isn't for this payment request."
-    if inv["created"] + INVOICE_TTL + 15 * 60 < (tx.get("blockTime") or time.time()):
+    if inv["created"] + INVOICE_TTL + 5 * 60 < (tx.get("blockTime") or time.time()):
         return "error", "That payment request had expired. Start a new one."
     wallet = pay_wallet()
     if inv["currency"] == "usdc":
@@ -307,4 +307,21 @@ def stripe_webhook(con, payload, sig_header):
         end = lines[0].get("period", {}).get("end") if lines else None
         if uid and end:
             grant(con, uid, 0, "card", "inv:" + obj.get("id", secrets.token_hex(6)), None, (obj.get("amount_paid") or 0) / 100, until=end + 3600)
+    elif kind == "charge.refunded" and obj.get("refunded"):           # fully refunded: the Pro it paid for ends now
+        _end_pro(con, obj.get("customer"), time.time())
+    elif kind == "charge.dispute.created":                            # chargeback: Pro ends now
+        cust = None
+        try:
+            cust = stripe_api("GET", "/charges/" + str(obj.get("charge", ""))).get("customer") if obj.get("charge") else None
+        except ValueError:
+            pass
+        _end_pro(con, cust, time.time())
+    elif kind == "customer.subscription.deleted":                     # cancelled (now, or at the end of the paid period)
+        _end_pro(con, obj.get("customer"), (obj.get("ended_at") or time.time()) + 3600)
     return 200, "ok"
+
+
+def _end_pro(con, customer, at):
+    """Bring a card customer's Pro end date forward to `at` (never pushes it later)."""
+    if customer:
+        con.execute("UPDATE users SET pro_until = MIN(COALESCE(pro_until, 0), ?) WHERE stripe_customer=?", (at, customer))

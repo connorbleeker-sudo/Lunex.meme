@@ -46,7 +46,7 @@
     <tr><td>Terms acceptance</td><td>You, at sign-up</td><td>The date you confirmed you're 18 or older and accepted the Terms and this policy</td></tr>
     <tr><td>Sign-in session</td><td>Created when you sign in</td><td>Keeps you signed in for up to 30 days. See the <a href="/cookies">Cookie Policy</a>.</td></tr>
     <tr><td>Watchlists, tracked wallets, alerts, X lists and your practice portfolio</td><td>You, in the dashboard</td><td>Saved to your account so they follow you to other devices</td></tr>
-    <tr><td>Community calls</td><td>You, when you post in Calls</td><td>Shown to other signed-in Lunex users with your name, the coin, your call and the coin's price when you posted. You can delete your own posts any time.</td></tr>
+    <tr><td>Community calls</td><td>You, when you post in Calls</td><td>Shown to other signed-in Lunex users with your name (or "Trader" if you haven't set one), the coin, your call and the coin's price when you posted. You can delete your own posts any time.</td></tr>
     <tr><td>Email preferences</td><td>You</td><td>Whether you get the weekly recap email, and when we last sent it</td></tr>
   </table>
   <p><strong>Rug checks</strong> on the welcome page and in the app don't need an account. We count how many are run, but don't store what was checked or who checked it.</p>
@@ -54,7 +54,7 @@
   <p><strong>We never collect</strong> seed phrases or private keys. If one is pasted into a wallet field, Lunex clears it before anything is sent.</p>
 
   <h3>Kept only in your browser</h3>
-  <p>Any API keys you add for X (Twitter) search or PumpPortal, your sound setting and Luna's downloaded AI model stay in your browser only and are never sent to our database. If you use X search, your key passes through our server to X for that request only and is not stored or logged.</p>
+  <p>Any API keys you add for X (Twitter) search or PumpPortal and Luna's downloaded AI model stay in your browser only and are never sent to our database. If you use X search, your key passes through our server to X for that request only and is not stored or logged.</p>
 
   <h3>Luna, the AI</h3>
   <p>Luna's answers come from Claude, an AI model made by Anthropic. When you ask her something, your question, your recent conversation with her and the data she looks up to answer it (for example your public wallet balances, your recent on-chain trades or a coin's market data) are sent from our server to Anthropic, which returns the answer. We don't store your questions or her answers. We do count how many questions each account asks each day and what they cost to answer, to keep usage fair, and delete those counts after 120 days.</p>
@@ -77,11 +77,12 @@
     <tr><th>Service</th><th>What for</th><th>What it receives</th></tr>
     <tr><td>Railway</td><td>Hosting Lunex and its database</td><td>All account data, stored on our behalf</td></tr>
     <tr><td>Stripe</td><td>Card payments and subscriptions</td><td>Your email, card details (entered with Stripe directly) and your subscription</td></tr>
-    <tr><td>Google Sign-In</td><td>Optional sign-in with Google</td><td>Loaded on the sign-in page. Google sees that you visited and, if you use it, your sign-in.</td></tr>
+    <tr><td>Google Sign-In</td><td>Optional sign-in with Google</td><td>Loaded on the welcome and sign-in page. Google sees that you visited and, if you use it, your sign-in.</td></tr>
     <tr><td>Google Fonts</td><td>The site's typefaces</td><td>Your IP address and browser details when fonts load</td></tr>
     <tr><td>Solana network (public RPC or Helius)</td><td>Reading wallets, sending transactions you sign, checking payments</td><td>Public wallet addresses and signed transactions. The blockchain is public by design.</td></tr>
     <tr><td>DexScreener, PumpPortal, CoinGecko</td><td>Live market and launch data, the SOL price</td><td>Requests for public coin data. PumpPortal also builds the unsigned trade you then approve in your wallet.</td></tr>
-    <tr><td>jsDelivr, esm.sh, unpkg</td><td>Delivering code libraries and Luna's AI model to your browser</td><td>Your IP address and browser details when files load</td></tr>
+    <tr><td>pump.fun image CDN, Pinata, DexScreener images</td><td>Showing coin pictures</td><td>Your IP address and browser details when images load</td></tr>
+    <tr><td>jsDelivr, esm.sh, unpkg, Hugging Face</td><td>Delivering code libraries and Luna's backup on-device AI model to your browser</td><td>Your IP address and browser details when files load</td></tr>
     <tr><td>Your email provider for Lunex (SMTP)</td><td>Sending the weekly recap</td><td>Your email address and the recap's contents</td></tr>
     <tr><td>Anthropic (Claude)</td><td>Writing Luna's answers</td><td>Your questions to Luna, your recent conversation with her, and the wallet, trade and coin data she looks up to answer them</td></tr>
     <tr><td>Open-Meteo, Wikipedia</td><td>Answers Luna looks up for you</td><td>Only the search, such as a city name or topic</td></tr>
@@ -93,15 +94,15 @@
   <ul>
     <li><strong>Account data</strong>, synced watchlists and practice, and your community posts: until you delete them or your account. Deleting your account deletes your posts too.</li>
     <li><strong>Sign-in sessions:</strong> up to 30 days, or until you sign out.</li>
-    <li><strong>Luna usage counts</strong> (how many questions you asked each day and what they cost): 120 days, or until you delete your account.</li>
+    <li><strong>Luna usage counts</strong> (how many questions you asked each day and what they cost): 120 days. If you delete your account, they are unlinked from it and kept only as anonymous daily totals until then.</li>
     <li><strong>Payment records</strong> (amount, date, method, transaction or invoice ID): kept after an account is deleted, without your email or name, for as long as tax and accounting law requires.</li>
     <li><strong>Blockchain transactions</strong> are public and permanent. Nobody, including us, can delete them.</li>
   </ul>
 
   <h2>Your choices and rights</h2>
   <ul>
-    <li><strong>Delete your account:</strong> open the account menu in the dashboard and choose <strong>Delete account</strong>. It takes effect immediately, and any card subscription is cancelled first.</li>
-    <li><strong>See or correct your data:</strong> your email, plan and wallet are shown in the account menu, and you can change your wallet there. For a copy of everything we hold about you, email us.</li>
+    <li><strong>Delete your account:</strong> open <strong>Account settings</strong> (from the account menu in the dashboard) and choose <strong>Delete account</strong>. It takes effect immediately, and any card subscription is cancelled first.</li>
+    <li><strong>See or correct your data:</strong> your email, plan and wallet are shown in Account settings, and you can change your wallet there. Account settings also has a download of the data we hold about you, or you can email us.</li>
     <li><strong>Cancel a card subscription:</strong> use <strong>Manage billing</strong> in the account menu.</li>
   </ul>
   <p>Depending on where you live, including California and other US states with privacy laws, you may have the right to know what we hold, get a copy, correct it, delete it, and opt out of its sale or use for targeted advertising. We don't sell data or run targeted advertising. To use any of these rights, email <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a> from your account's email address. We'll answer within 45 days and won't treat you differently for asking. If we turn down a request, you can reply to appeal.</p>

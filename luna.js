@@ -99,7 +99,7 @@ page.innerHTML = `
       <div class="ld-log" aria-live="polite"></div>
       <div class="ld-chips"></div>
       <form class="ld-form"><input placeholder="Ask Luna anything…" autocomplete="off"><button aria-label="Send">${I('up')}</button></form>
-      <p class="lp-note">${window.LUNEX_USER && window.LUNEX_USER.lunaCloud ? "Luna answers with Claude, an AI by Anthropic: your question and the wallet or coin data she looks up for it go through Lunex's server to answer you." : "Luna's brain runs on your own device, so your questions stay on your computer."} Never share a seed phrase or private key with anyone, including Luna.</p>
+      <p class="lp-note">${window.LUNEX_USER && window.LUNEX_USER.lunaCloud ? "Luna answers with Claude, an AI by Anthropic: your question and the wallet or coin data she looks up for it go through Lunex's server to answer you." : "Luna's brain runs on your own device, so your questions stay on your computer."} Luna can be wrong and her calls are not financial advice. Never share a seed phrase or private key with anyone, including Luna.</p>
     </section>
     <aside class="lp-pf" id="lp-pf"></aside>
   </div>`;
@@ -334,7 +334,7 @@ function walletContext() {
 }
 async function aiAnswer(text, tools = '', onToken) {
   const now = new Date();
-  const sys = `You are Luna, the mascot and AI copilot of Lunex, a live memecoin and pump.fun dashboard the user built for themself and their friends.
+  const sys = `You are Luna, the mascot and AI copilot of Lunex, a live memecoin and pump.fun dashboard. The user pays for Lunex Pro.
 You have NO internet access of your own. Live facts only reach you through TOOL RESULTS and LIVE CONTEXT below. When those contain the answer, state the exact numbers from them. When a question needs live info (weather, prices, news, scores) that is NOT in TOOL RESULTS, say plainly that you couldn't check it live. Never guess or give "typical" values as if they were current.
 The user's local time is ${now.toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}).
 
@@ -344,7 +344,7 @@ ${tools || '(none for this question)'}
 Style: friendly, plain and direct, like a smart friend texting. Say concrete, literal things; no slogans, riddles, metaphors or motivational one-liners. Answer the actual question in the first sentence. Keep it short: 2 to 5 sentences unless the user asks for more. No headings, no summary line at the end.
 Only state facts about the user's coins, trades or wallet if they appear in YOUR WALLET or LIVE CONTEXT. If they don't, say you can't see that and suggest asking "check my wallet". Never invent entries, multiples or past actions. For lists, start each item on its own line with "- ". You may wrap a key name or number in double asterisks like **this**.
 You can answer ANY question: general knowledge, math, coding, school, life advice, not only crypto.
-Be decisive. For any should-I / good-or-bad question, start with a clear verdict ("Yes.", "No.", "Buy it.", "Skip it.", "Sell it.") and then give the reason and the concrete plan (size, take-profit at 2x, stop at -40%). Do not add disclaimers, risk warnings, or lines like "nobody can predict the market"; the user knows. Be confident, but only use numbers that appear in LIVE CONTEXT or YOUR WALLET. Never invent prices or numbers that aren't in the context. If you don't know, say so. Never ask for or accept private keys or seed phrases.
+Be decisive. For any should-I / good-or-bad question, start with a clear verdict ("Yes.", "No.", "Buy it.", "Skip it.", "Sell it.") and then give the reason and the concrete plan (size, take-profit at 2x, stop at -40%). Be honest: most new memecoins go to zero and nobody can predict a single coin's price, so never promise profits; say it in one short line when it matters, without lecturing. Only use numbers that appear in LIVE CONTEXT or YOUR WALLET. Never invent prices or numbers that aren't in the context. If you don't know, say so. Never ask for or accept private keys or seed phrases.
 Today is ${new Date().toDateString()}.
 Your arithmetic is unreliable, so never do multi-step maths in your head: only state numbers that appear in TOOL RESULTS, YOUR WALLET or LIVE CONTEXT, and otherwise explain the idea without inventing figures.
 Read each new message on its own terms. Never reuse or reword your previous answer; if the new question is about something you have no data for, say exactly what you can't see.
@@ -396,6 +396,7 @@ function readVault() {
 function perPlay() {
   if (prof.cash == null) return null;
   const solPx = g('solUsd') || 0, usable = Math.max(0, prof.cash - .01 * solPx);   // keep ~0.01 SOL for fees
+  if (usable < 1) return null;      // an empty wallet: plans fall back to "x% of your stack" instead of $0.00
   const frac = usable < 20 ? 1 / 3 : usable < 200 ? .15 : usable < 2000 ? .07 : .03;
   return { usable, frac, amt: usable * frac };
 }
@@ -512,7 +513,7 @@ function assess(f) {   // f = { kind:'dex', p, a } | { kind:'pump', c, s }
 }
 
 // ---------------------------------------------------------------- VERDICT: a definitive call from the checks
-// BUY / SMALL BUY / WAIT / SKIP, a confidence %, the reasons, and a money plan with real numbers.
+// BUY / SMALL BUY / WAIT / SKIP, how many of the six checks pass, the reasons, and a money plan with real numbers.
 function verdict(x) {
   const fails = x.checks.filter(c => !c[1]).map(c => c[0]), wins = x.checks.filter(c => c[1]).map(c => c[0]);
   let call;
@@ -532,17 +533,12 @@ function verdict(x) {
     else if (x.pass >= 3) call = 'WAIT';
     else call = 'SKIP';
   }
-  const q = x.kind === 'dex' ? (x.a.safety + x.a.momentum) / 2 : (x.s?.score || 50);
-  const conf = Math.max(30, Math.min(/BUY/.test(call) ? 88 : 94, Math.round(
-    call === 'BUY' ? 52 + x.pass * 5 + (q - 50) * .35
-    : call === 'SMALL BUY' ? 45 + x.pass * 4 + (q - 50) * .3
-    : call === 'WAIT' ? 55 + (3 - Math.abs(x.pass - 3.5)) * 4
-    : 70 + (6 - x.pass) * 4)));
+
   const why = call === 'BUY' || call === 'SMALL BUY'
     ? `Passes ${x.pass}/6: ${wins.slice(0, 3).join(', ').toLowerCase()}.${fails.length ? ' Weak spot: ' + fails[0].toLowerCase() + '.' : ''}`
     : call === 'WAIT' ? `Only ${x.pass}/6. Buy it once ${fails.slice(0, 2).join(' and ').toLowerCase()} flips.`
     : `Fails ${6 - x.pass}/6: ${fails.slice(0, 3).join(', ').toLowerCase()}.${x.kind === 'pump' && x.c.devSold ? ' The dev already sold.' : ''}`;
-  return { call, conf, why };
+  return { call, pass: x.pass, why };
 }
 function moneyPlan(x, v) {
   if (v.call === 'SKIP' || v.call === 'WAIT') return '';
@@ -551,13 +547,13 @@ function moneyPlan(x, v) {
   const sz = size != null ? `**${money(size)}**` : `${v.call === 'SMALL BUY' ? '1–2%' : '2–4%'} of your stack`;
   const lines = [`**The play:** put in ${sz} at **${money(mc)}** market cap.`,
     `- **Take profit at ${money(mc * 2)}** (2x)${size != null ? `: you make **+${money(size)}**` : ': you double that slice'}. Sell at least half there.`,
-    `- **Stop at ${money(mc * .6)}** (−40%)${size != null ? `: you lose **${money(size * .4)}**` : ''}. No exceptions.`];
+    `- **Stop at ${money(mc * .6)}** (−40%)${size != null ? `: you lose **${money(size * .4)}**` : ''}. Stick to it.`];
   if (x.kind === 'pump') lines.push('- **No move within 10 minutes? Get out.** Launches that stall don\'t come back.');
   return lines.join('\n');
 }
 function verdictHtml(v) {
   const cls = { 'BUY': 'buy', 'SMALL BUY': 'small', 'WAIT': 'wait', 'SKIP': 'skip', 'SELL': 'skip', 'HOLD': 'wait' }[v.call] || 'wait';
-  return `<div class="ld-verdict v-${cls}"><b>${v.call}</b><span>${v.conf}% confidence</span></div>`;
+  return `<div class="ld-verdict v-${cls}"><b>${v.call}</b><span>${v.pass != null ? `Passes ${v.pass}/6 checks · ` : ''}not financial advice</span></div>`;
 }
 
 function shortlist() {
@@ -677,7 +673,7 @@ async function answer(raw) {
     const x = pos && pos.pl ? parseFloat((String(pos.pl).match(/\(([\d.]+)x\)/) || [])[1]) : NaN;
     if (pos) lines.push(`Your position: worth **${money(pos.value || 0)}**${pos.pl ? `, P/L **${esc(pos.pl)}**` : ''}.`);
     const now = f ? verdict(assess(f)) : null;
-    if (now) lines.push(`**My call now: ${now.call === 'SKIP' ? 'SELL' : now.call === 'WAIT' ? 'HOLD, don\'t add' : 'HOLD'}** (${now.conf}% confidence). ${now.why}`);
+    if (now) lines.push(`**My call now: ${now.call === 'SKIP' ? 'SELL' : now.call === 'WAIT' ? 'HOLD, don\'t add' : 'HOLD'}** (passes ${now.pass}/6 checks). ${now.why}`);
     lines.push(isNaN(x) ? '**What your rules say:** take your initial out at 2x, cut at −40%. If you don\'t have a stop alert on it yet, set one now.'
       : x <= .6 ? `**What your rules say:** you're down ${Math.round((1 - x) * 100)}%, past your −40% stop. The plan says cut it, or keep only what you're fine losing completely.`
       : x < 1 ? `**What your rules say:** you're down ${Math.round((1 - x) * 100)}%. That's inside your −40% stop, so nothing is broken yet. Set the stop alert so the decision is made for you if it keeps falling.`
@@ -720,7 +716,7 @@ async function answer(raw) {
     if (!prof.addr) { startConnect(); return { parts: ["Connect your pump.fun first and I'll go through your bags."], mood: 'think' }; }
     readVault(); const pp = perPlay();
     const lines = [`**Your wallet:** ${money(prof.total || 0)} total · ${money(prof.cash || 0)} cash${pp ? ` · per-play **${money(pp.amt)}**` : ''}.`];
-    if (!prof.positions.length) lines.push(`No live positions${prof.dust ? ` (${prof.dust} dead or dust tokens)` : ''}. You're all cash, which is the best place to be until a setup passes the checks.`);
+    if (!prof.positions.length) lines.push(`No live positions${prof.dust ? ` (${prof.dust} dead or dust tokens)` : ''}. ${(prof.cash || 0) >= 1 ? "You're all cash, which is the best place to be until a setup passes the checks." : "There's no SOL or USDC in it either, so add some before you can trade."}`);
     else {
       lines.push(`\nYou're holding **${prof.positions.length} coin${prof.positions.length > 1 ? 's' : ''}**${prof.dust ? ` (plus ${prof.dust} dead or dust tokens)` : ''}:`);
       prof.positions.slice(0, 6).forEach(p => lines.push(`• **${esc(p.sym)}**: worth **${money(p.value || 0)}**${p.c24 != null ? `, ${pct(p.c24)} in 24h` : ''}${p.pl ? `, P/L ${esc(p.pl)}` : ''}${p.plan ? `. ${esc(p.plan)}` : ''}`));
@@ -739,7 +735,7 @@ async function answer(raw) {
   // "trade for me": Luna picks the best live setup, sizes it and opens a ready ticket. The visitor approves in their wallet.
   if (/\b(trade for me|make (me )?a trade|pick (and|&) buy|buy (the )?(best|top) (one|pick|play)|auto.?trade|ape the best|do it for me|place a trade)\b/.test(t) && window.TRADE) {
     const best = shortlist().find(x => /BUY/.test(verdict(x).call));
-    if (!best) return { parts: [{ html: verdictHtml({ call: 'WAIT', conf: 80 }) }, "**No trade right now.** Nothing live clears my bar for a buy, so I'm not opening a ticket. Ask me again in a few minutes; launches turn over fast."], mood: 'think' };
+    if (!best) return { parts: [{ html: verdictHtml({ call: 'WAIT' }) }, "**No trade right now.** Nothing live clears my bar for a buy, so I'm not opening a ticket. Ask me again in a few minutes; launches turn over fast."], mood: 'think' };
     const v = verdict(best);
     const mint = best.kind === 'pump' ? best.c.mint : best.p.baseToken.address, sym = best.kind === 'pump' ? best.c.symbol : best.p.baseToken.symbol;
     window.TRADE.open({ mint, side: 'buy' }); logPick(best, 'trade for me');
@@ -751,7 +747,7 @@ async function answer(raw) {
   // what to buy
   if (/^\W*(so |ok |okay )?(what|which)( coins?| memecoins?| tokens?)? (should|do|can) i (buy|ape)( (right )?now| today)?\W*$|what to buy\b|give me (a )?(play|pick)|any plays|best (play|coin) (right )?now|pick (one|a coin) for me|what (coin|memecoin|token) should i|what should i ape/.test(t) && !/\b(car|house|phone|laptop|game|shoes?|gift|food)\b/.test(t)) {
     const list = shortlist().map(x => ({ x, v: verdict(x) })).filter(o => /BUY/.test(o.v.call));
-    if (!list.length) return { parts: [{ html: verdictHtml({ call: 'WAIT', conf: 80 }) }, "**Don't buy anything right now.** Nothing live clears my bar. Keep your cash and ask me again in a few minutes; launches turn over fast."], mood: 'think' };
+    if (!list.length) return { parts: [{ html: verdictHtml({ call: 'WAIT' }) }, "**Don't buy anything right now.** Nothing live clears my bar. Keep your cash and ask me again in a few minutes; launches turn over fast."], mood: 'think' };
     const parts = [`**Buy ${list[0].x.kind === 'pump' ? '$' + esc(list[0].x.c.symbol) : '$' + esc(list[0].x.p.baseToken.symbol)}.** That's my top call${list.length > 1 ? `, with ${list.length - 1} backup${list.length > 2 ? 's' : ''}` : ''}${prof.addr ? ', sized for your wallet' : ''}:`];
     list.forEach(({ x, v }, i) => {
       logPick(x, 'shortlist #' + (i + 1));
@@ -1050,14 +1046,14 @@ function coinFacts(f) {
     const c = f.c;
     return { found: true, kind: 'brand-new pump.fun launch', symbol: c.symbol, name: c.name, mint: c.mint, minutesOld: Math.round((Date.now() - c.created) / 60000),
       marketCapUsd: round6(c.mcap * sol), earlySignalScore: f.s.score, buys: c.buys, sells: c.sells, devSold: !!c.devSold, redFlags: f.s.flags.map(z => z.t),
-      sixChecks: checks, checksPassed: x.pass, lunaCall: v.call, lunaConfidencePct: v.conf, lunaReason: v.why };
+      sixChecks: checks, checksPassed: x.pass, lunaCall: v.call, lunaReason: v.why };
   }
   const p = f.p, a = f.a;
   return { found: true, kind: p.dexId === 'pumpfun' ? 'on the pump.fun bonding curve' : 'trading on ' + p.dexId, chain: p.chainId, symbol: p.baseToken.symbol, name: p.baseToken.name,
     mint: p.baseToken.address, priceUsd: round6(+p.priceUsd), marketCapUsd: round6(a.fdv), liquidityUsd: p.dexId === 'pumpfun' ? 'bonding curve' : round6(a.liq),
     volume1hUsd: round6(a.v1), volume24hUsd: round6(a.v24), change1hPct: a.c1, change6hPct: a.c6, change24hPct: a.c24, buySharePct1h: Math.round(a.buyRatio * 100),
     ageHours: a.age != null ? +(a.age / 36e5).toFixed(1) : null, momentum: a.momentum, safety: a.safety, redFlags: a.flags,
-    sixChecks: checks, checksPassed: x.pass, lunaCall: v.call, lunaConfidencePct: v.conf, lunaReason: v.why,
+    sixChecks: checks, checksPassed: x.pass, lunaCall: v.call, lunaReason: v.why,
     differentCoinsUsingThisTicker: f.copies || 1 };
 }
 const TOOL_LABEL = { get_wallet: 'Checking your wallet…', get_trade_history: 'Reading your trade history…', lookup_coin: 'Looking up the coin…', market_overview: 'Reading the market…', calculate: 'Doing the maths…' };
@@ -1106,12 +1102,18 @@ async function runTool(name, input = {}) {
 async function cloudAnswer(text, onStatus) {
   if (cloudOff) return null;
   const msgs = [...cloudHist, { role: 'user', content: text }];
+  let qid = '';                       // the server's id for this question: lookup rounds ride on it
+  let histLen = cloudHist.length;     // earlier turns at the front of msgs (pairs of user + assistant)
   for (let round = 0; round <= 6; round++) {
     let r, j;
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 60000);
     try {
-      r = await fetch('/api/luna/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs, now: new Date().toLocaleString() }) });
+      r = await fetch('/api/luna/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl.signal,
+        body: JSON.stringify({ messages: msgs, qid, now: new Date().toLocaleString() }) });
       j = await r.json().catch(() => ({}));
-    } catch { return round ? { text: "I lost the connection halfway through that. Ask me again.", error: true } : null; }
+    } catch { return round ? { text: "That took too long or the connection dropped. Ask me again.", error: true } : null; }
+    finally { clearTimeout(timer); }
+    if (j.qid) qid = j.qid;
     if (j.fallback) { if (j.reason === 'off' || j.reason === 'key') cloudOff = true; return null; }
     if (!r.ok) return { text: j.error || 'Something went wrong. Try again in a moment.', error: true };
     const blocks = Array.isArray(j.content) ? j.content : [], uses = blocks.filter(b => b.type === 'tool_use');
@@ -1122,7 +1124,9 @@ async function cloudAnswer(text, onStatus) {
     }
     onStatus && onStatus(TOOL_LABEL[uses[0].name] || 'Looking that up…');
     msgs.push({ role: 'assistant', content: blocks });
-    const results = await Promise.all(uses.map(async u => ({ type: 'tool_result', tool_use_id: u.id, content: await runTool(u.name, u.input || {}) })));
+    const cap = Math.max(2000, Math.floor(9000 / uses.length));     // keeps the whole request under the server's size limit
+    const results = await Promise.all(uses.map(async u => ({ type: 'tool_result', tool_use_id: u.id, content: String(await runTool(u.name, u.input || {})).slice(0, cap) })));
+    while (JSON.stringify(msgs).length + JSON.stringify(results).length > 52000 && histLen >= 2) { msgs.splice(0, 2); histLen -= 2; }   // drop the oldest earlier chat turns if it's still too big
     msgs.push({ role: 'user', content: results });
   }
   return { text: 'That needed too many lookups. Try asking it a simpler way.', error: true };
@@ -1426,7 +1430,8 @@ body[data-page=luna] #alertBar[style*="block"] ~ .page .lp{height:calc(100vh - 2
 .ld-msg code{font-family:var(--mono);font-size:.9em;padding:1px 6px;border-radius:6px;background:rgba(255,255,255,.08)}
 .nv-luna-tab{position:relative}
 .nv-luna-tab::after{content:'';position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#ff7fd1;box-shadow:0 0 10px #ff7fd1;animation:l-tip 1.6s infinite}
-@media (max-width:1000px){.lp{grid-template-columns:1fr;height:auto}.lp-side{display:none}.lp-chat{height:calc(100vh - 150px)}}
+@media (max-width:1150px){.lp-side{display:none}}
+@media (max-width:1000px){.lp{grid-template-columns:1fr;height:auto}.lp-side{display:none}.lp-chat{height:calc(100vh - 150px);min-height:460px}}
 `;
 document.head.appendChild(st);
 })();

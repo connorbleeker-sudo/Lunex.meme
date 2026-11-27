@@ -838,3 +838,36 @@ html.lx-noscroll { overflow: hidden; }
 @media (max-width: 1000px) { .lx-start-list { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 600px) { .lx-start-list { grid-template-columns: 1fr; } .lx-start-prog { width: 100%; order: 3; } }
 @media (prefers-reduced-motion: reduce) { .lx-tour-spot, .lx-start-prog i, .lx-tip { transition: none; } }
+
+/* ==========================================================================
+   PHONES, TABLETS & SMALL LAPTOPS: the tabs get their own full-width, swipeable row
+   ========================================================================== */
+@media (max-width: 1100px) {
+  header { flex-wrap: wrap !important; row-gap: 8px !important; padding: 8px 10px !important; top: 8px; width: calc(100% - 16px); }
+  header nav { order: 10; flex: 1 1 100% !important; width: 100%; min-width: 0; margin: 0 !important; overflow-x: auto !important;
+    -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  header nav button[data-p] { flex: none; }
+  header .brand { margin-right: auto !important; }
+  header .live { display: none !important; }
+  header .acct { flex: none; }
+  #notifyBtn { font-size: 0 !important; padding: 9px 11px !important; }
+  #notifyBtn .ic { font-size: 15px; }
+  body { padding-top: 142px !important; }
+}
+@media (max-width: 420px) {
+  header .brand { font-size: 19px !important; gap: 7px; }
+  .nv-more-btn { padding: 9px 10px !important; }
+  header .nv-sound { display: none !important; }   /* no room on small phones; the toggle is there on wider screens */
+}
+@media (max-width: 640px) {
+  #p-mine .row { flex-wrap: wrap !important; }
+  #p-mine #tCA, #p-mine #tEntry, #p-mine #myAddr { flex: 1 1 100% !important; width: 100% !important; min-width: 0 !important; }
+  #tList { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #tList table { min-width: 520px; }
+  .ovl-check-body { flex-direction: column !important; align-items: stretch !important; }
+  .ovl-check-body .ovl-luna { display: none !important; }
+  #luna-dock { transform: scale(.6); transform-origin: bottom right; }
+  .nv-legal { flex-wrap: wrap; overflow-wrap: anywhere; }
+  .ov-meet { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (min-width: 1001px) and (max-width: 1100px) { .lp { height: calc(100vh - 198px) !important; } }

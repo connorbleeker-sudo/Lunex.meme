@@ -15,7 +15,7 @@ Lunex checked against a 20-point "don't get sued" checklist on 2026-11-26. This 
 | 9 | Remove dark patterns | ✅ OK | The renewal banner can be dismissed, and Pro is easy to decline. Monthly is selected by default but clearly labelled. |
 | 10 | No hidden fees | ✅ OK | Pro now shows $20/month up front, and renewal terms sit under the button. Trades show the PumpPortal 0.5% fee and network fees. |
 | 11 | No fake reviews | ✅ OK | There are no testimonials. |
-| 12 | No unsupported claims | ⚠️ Fixed one | Changed "Pro to win" to "Pro to act". The "84% confidence" chat and "~1 second" are sample or performance claims, so keep them accurate. |
+| 12 | No unsupported claims | ⚠️ Fixed one | Changed "Pro to win" to "Pro to act". Replaced the made-up "confidence %" with the real "passes N/6 checks" and "~1 second" with "seconds". |
 | 13 | Alt text | ⚠️ Check | Coin logos use `alt=""`, which is fine because they're decorative. Any meaningful images need real alt text. |
 | 14 | Color contrast | ✅ Mostly OK | `--faint` (#7d7b89) on #060608 is about 4.8:1, which passes AA for body text. |
 | 15 | Keyboard navigation | ⚠️ Check | Most controls are buttons. The account menu uses `role="menu"` but has no arrow-key handling. Either add it or drop the role. |

@@ -13,7 +13,7 @@ Google sign-in: set GOOGLE_CLIENT_ID (env var) or put {"google_client_id": "..."
 Hosting settings (environment variables, e.g. in Railway > Variables):
   LUNEX_DB=/data/lunex.db        keep accounts on a persistent volume mounted at /data
   GOOGLE_CLIENT_ID=...           Google sign-in
-  LUNEX_PRO_EMAILS=a@x.com,...   accounts that always get Pro (you, testers)
+  LUNEX_PRO_EMAILS=a@x.com,...   accounts that always get Pro (you, testers), once signed in with Google
   SOLANA_RPC=https://...         a faster Solana RPC (e.g. Helius) instead of the free public one
   PORT                           set by the host automatically
 
@@ -31,6 +31,7 @@ import hmac
 import http.server
 import json
 import os
+import posixpath
 import re
 import secrets
 import sqlite3
@@ -66,7 +67,24 @@ SESSION_DAYS = 30
 SOL_ADDR = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,24}$")
 PRO_FILES = {"/luna.js", "/brain.js", "/brain-worker.js"}           # Luna's AI: only sent to Pro accounts
-NEVER_SERVE = re.compile(r"(^/\.|/\.|\.py$|\.db$|\.db-|lunex\.config\.json$|^/_original/|railway\.json$|requirements\.txt$)", re.I)
+NEVER_SERVE = re.compile(r"(^/\.|/\.|\.py$|\.pyc$|\.db$|\.db-|lunex\.config\.json$|^/_original(/|$)|^/upload-to-github(/|$)|^/__pycache__(/|$)|railway\.json$|requirements\.txt$|\.pem$|\.log$)", re.I)
+
+
+def safe_path(raw):
+    """The request path decoded exactly once and normalised, or None if it is suspicious.
+    Checks run on this form, so `%2E`, `%2F`, `..` or `\\` can't sneak a blocked file past them."""
+    try:
+        p = urllib.parse.unquote(urllib.parse.urlparse(raw).path, errors="strict") if raw else "/"
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if not p.startswith("/") or any(c in p for c in ("\x00", "\\", "%")) or any(ord(c) < 32 for c in p):
+        return None
+    if ".." in p.split("/"):
+        return None
+    norm = posixpath.normpath(p)
+    if p.endswith("/") and norm != "/":
+        norm += "/"
+    return norm
 PUBLIC_PAGES = {"/welcome", "/welcome.html", "/welcome.css", "/welcome.js", "/favicon.ico", "/favicon.svg", "/legal.css", "/lunex-ui.js", "/welcome-live.js"}
 LEGAL_PAGES = {"/privacy": "privacy.html", "/terms": "terms.html", "/refunds": "refunds.html", "/cookies": "cookies.html"}
 
@@ -166,16 +184,22 @@ def check_password(pw, stored):
         return False
 
 
-def plan_of(u):
-    # LUNEX_PRO_EMAILS="you@x.com,friend@y.com" makes those accounts Pro without touching the database
+def is_owner(u):
+    # LUNEX_PRO_EMAILS="you@x.com,friend@y.com" makes those accounts Pro without touching the database.
+    # Only once Google has proved the address belongs to them: email sign-up never checks the address,
+    # so otherwise anyone could sign up as a listed email first and get free lifetime Pro.
     owners = {e.strip().lower() for e in os.environ.get("LUNEX_PRO_EMAILS", "").split(",") if e.strip()}
-    if u["email"].lower() in owners or u["plan"] == "pro":       # owners / manually granted: Pro with no end date
+    return bool(u["google_sub"]) and u["email"].lower() in owners
+
+
+def plan_of(u):
+    if is_owner(u) or u["plan"] == "pro":       # owners / manually granted: Pro with no end date
         return "pro"
     return "pro" if (u["pro_until"] or 0) > time.time() else "free"   # paid pass still running
 
 
 def public_user(u):
-    lifetime = u["email"].lower() in {e.strip().lower() for e in os.environ.get("LUNEX_PRO_EMAILS", "").split(",") if e.strip()} or u["plan"] == "pro"
+    lifetime = is_owner(u) or u["plan"] == "pro"
     return {"email": u["email"], "name": u["name"] or u["email"].split("@")[0], "wallet": u["wallet"] or "",
             "plan": plan_of(u), "google": bool(u["google_sub"]),
             "proUntil": 0 if lifetime else (u["pro_until"] or 0), "lifetime": lifetime, "card": bool(u["stripe_customer"]),
@@ -186,12 +210,19 @@ def public_user(u):
 _attempts = {}
 
 
+_attempts_lock = threading.Lock()
+
+
 def throttled(ip, limit=12, window=300):
     now = time.time()
-    hits = [t for t in _attempts.get(ip, []) if now - t < window]
-    hits.append(now)
-    _attempts[ip] = hits
-    return len(hits) > limit
+    with _attempts_lock:
+        if len(_attempts) > 20000:    # forget old visitors so made-up addresses can't grow memory forever
+            for k in [k for k, v in _attempts.items() if not v or now - v[-1] > 3600]:
+                del _attempts[k]
+        hits = [t for t in _attempts.get(ip, []) if now - t < window]
+        hits.append(now)
+        _attempts[ip] = hits
+        return len(hits) > limit
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -200,6 +231,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")                          # no framing (clickjacking)
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        if HOSTED:
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
         if self.isolate:
             # Lets Luna's CPU brain use every processor core. "credentialless" keeps third-party images loading.
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
@@ -226,9 +262,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    def body_length(self, limit):
+        """The request's Content-Length, or None if it's missing a number, negative or over `limit`.
+        (A negative length would make read() take everything the client sends, past every size cap.)"""
+        try:
+            n = int(self.headers.get("Content-Length", 0) or 0)
+        except ValueError:
+            return None
+        return n if 0 <= n <= limit else None
+
     def read_json(self, limit=20000):
-        n = int(self.headers.get("Content-Length", 0) or 0)
-        if n > limit:
+        n = self.body_length(limit)
+        if n is None:
             return None
         try:
             return json.loads(self.rfile.read(n) or b"{}")
@@ -266,22 +311,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def secure_flag(self):
         # over HTTPS (the host's proxy says so), the login cookie is never sent over plain http
-        return "; Secure" if self.headers.get("X-Forwarded-Proto", "").lower() == "https" else ""
+        return "; Secure" if HOSTED or self.headers.get("X-Forwarded-Proto", "").lower() == "https" else ""
 
     def client_ip(self):
-        # behind the host's proxy every request comes from the proxy; the real visitor is the first X-Forwarded-For entry
+        # behind the host's proxy every request comes from the proxy. The proxy adds the real visitor's address as the
+        # LAST X-Forwarded-For entry; anything before it was sent by the visitor and can be made up.
         if HOSTED:
-            fwd = self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+            fwd = self.headers.get("X-Forwarded-For", "").split(",")[-1].strip()
             if fwd:
                 return fwd
         return self.client_address[0]
 
+    def do_HEAD(self):
+        # the stock HEAD handler skips every check in do_GET, so it isn't offered
+        self.send_error(405)
+
+    def list_directory(self, path):
+        self.send_error(404)     # never show a folder's file list
+        return None
+
     # ------------------------------------------------------------ GET
     def do_GET(self):
-        path = urllib.parse.urlparse(self.path).path
-        if NEVER_SERVE.search(path):
+        path = safe_path(self.path)
+        if path is None or NEVER_SERVE.search(path):
             self.send_error(404)
             return
+        query = urllib.parse.urlparse(self.path).query
+        self.path = urllib.parse.quote(path) + ("?" + query if query else "")   # the file server decodes this once, back to exactly `path`
         user = self.current_user()
 
         if path == "/api/me":
@@ -375,8 +431,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        if path in PRO_FILES and plan_of(user) != "pro":
-            if path == "/luna.js":            # free accounts get the upgrade screen instead of Luna
+        if path.lower() in PRO_FILES and plan_of(user) != "pro":   # lower(): Windows file names ignore case
+            if path.lower() == "/luna.js":            # free accounts get the upgrade screen instead of Luna
                 self.path = "/luna-locked.js"
                 super().do_GET()
             else:
@@ -432,8 +488,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"error": str(e)}, 502)
 
     # ------------------------------------------------------------ POST
+    def same_origin(self):
+        """False when a browser says this POST came from another website (forged sign-ins, cross-site actions).
+        Browsers always send Origin on cross-site POSTs; servers like Stripe send none, and are checked by signature."""
+        if (self.headers.get("Sec-Fetch-Site") or "").lower() == "cross-site":
+            return False
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True
+        if origin == "null":          # sandboxed frames and data: pages
+            return False
+        host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "").lower()
+        return urllib.parse.urlparse(origin).netloc.lower() == host
+
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if path not in ("/api/stripe/webhook", "/unsubscribe") and not self.same_origin():
+            self.send_json({"error": "That request came from another website, so it was blocked."}, 403)
+            return
         if path == "/api/signup":
             return self.api_signup()
         if path == "/api/login":
@@ -451,8 +523,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/unsubscribe":                   # one-click unsubscribe from mail apps (List-Unsubscribe-Post)
             return self.unsubscribe()
         if path == "/api/stripe/webhook":            # called by Stripe's servers; verified by signature, not by session
-            n = int(self.headers.get("Content-Length", 0) or 0)
-            payload = self.rfile.read(n) if n <= 500000 else b""
+            n = self.body_length(500000)
+            payload = self.rfile.read(n) if n else b""
             try:
                 with _db_lock, db() as con:
                     code, msg = payments.stripe_webhook(con, payload, self.headers.get("Stripe-Signature", ""))
@@ -605,7 +677,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"ok": True, "removed": n})
             return
         if path == "/rpc":
-            return self.relay_rpc()
+            return self.relay_rpc(user)
         self.send_error(404)
 
     def api_signup(self):
@@ -641,6 +713,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         b = self.read_json() or {}
         email, pw = str(b.get("email", "")).strip().lower(), str(b.get("password", ""))
+        if throttled("login:" + email[:200], limit=10, window=900):   # per account too, so changing address doesn't help guessing
+            self.send_json({"error": "Too many tries for this account. Wait 15 minutes."}, 429)
+            return
         with db() as con:
             u = con.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
         if not u or not u["pw_hash"] or not check_password(pw, u["pw_hash"]):
@@ -674,7 +749,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with _db_lock, db() as con:
             u = con.execute("SELECT * FROM users WHERE google_sub=?", (sub,)).fetchone() or \
                 con.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
-            if u:
+            if u and not u["google_sub"] and u["pw_hash"]:
+                # an email/password account Google has now proved belongs to this person. Nobody ever checked that
+                # whoever set its password owned the address, so the password and its sign-ins stop working:
+                # someone who signed up as them first can't keep a way in.
+                con.execute("UPDATE users SET google_sub=?, pw_hash=NULL, name=COALESCE(NULLIF(name,''),?) WHERE id=?", (sub, name, u["id"]))
+                con.execute("DELETE FROM sessions WHERE user_id=?", (u["id"],))
+                uid = u["id"]
+            elif u:
                 con.execute("UPDATE users SET google_sub=?, name=COALESCE(NULLIF(name,''),?) WHERE id=?", (sub, name, u["id"]))
                 uid = u["id"]
             elif not agree:                          # a new account: needs the 18+ / Terms box ticked first
@@ -700,14 +782,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def account_export(self, user):
         with db() as con:
             pays = [dict(r) for r in con.execute("SELECT method, plan, usd, days, created, proof FROM payments WHERE user_id=?", (user["id"],))]
-        iso = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t)) if t else None
+            synced = {r["key"]: r["value"] for r in con.execute("SELECT key, value FROM user_data WHERE user_id=?", (user["id"],))}
+            posts = [dict(r) for r in con.execute("SELECT * FROM chat WHERE user_id=? ORDER BY created", (user["id"],))]
+            luna = [dict(r) for r in con.execute("SELECT day, questions, calls, cost FROM ai_usage WHERE user_id=? ORDER BY day", (user["id"],))]
+        iso =lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t)) if t else None
         return {"exported": iso(time.time()), "account": {
             "email": user["email"], "name": user["name"], "wallet": user["wallet"], "plan": plan_of(user),
             "pro_until": iso(user["pro_until"]), "created": iso(user["created"]), "terms_accepted": iso(user["terms_accepted"]),
             "sign_in_methods": [m for m, on in (("password", user["pw_hash"]), ("google", user["google_sub"])) if on],
             "card_customer": bool(user["stripe_customer"])},
             "payments": [{**p, "created": iso(p["created"])} for p in pays],
-            "note": "Watchlists, alert settings, tracked wallets and API keys are stored only in your browser, not on Lunex's servers."}
+            "synced_settings": synced,
+            "community_posts": [{k: v for k, v in {**p, "created": iso(p["created"])}.items() if k != "user_id"} for p in posts],
+            "luna_usage_per_day": luna,
+            "note": "API keys you add stay only in your browser and are not included."}
 
     def api_password(self, user):
         if throttled(self.client_ip()):
@@ -786,7 +874,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             got = live.price_of(mint)                  # stamp the price at the moment of the call
             if got:
                 sym, price, fdv = got
-        name = (user["name"] or user["email"].split("@")[0])[:40]
+        name = (user["name"] or "").strip()[:40] or "Trader"     # never show part of someone's email to other users
         with _db_lock, db() as con:
             mid = con.execute("INSERT INTO chat (user_id, name, pro, text, mint, sym, call, price, fdv, created) VALUES (?,?,?,?,?,?,?,?,?,?)",
                               (user["id"], name, 1 if plan_of(user) == "pro" else 0, text, mint, sym, call if mint else "", price, fdv, time.time())).lastrowid
@@ -846,8 +934,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             con.execute("DELETE FROM users WHERE id=?", (user["id"],))
         self.send_json({"ok": True}, cookie=f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
 
-    def relay_rpc(self):
-        n = int(self.headers.get("Content-Length", 0) or 0)
+    def relay_rpc(self, user):
+        n = self.body_length(65536)
+        if n is None:
+            self.send_error(413)
+            return
+        if throttled(f"rpc:{user['id']}", limit=300, window=60):   # plenty for reading a wallet's history; stops relay abuse
+            self.send_json({"error": {"message": "Too many requests. Wait a minute."}}, 429)
+            return
         body = self.rfile.read(n)
         try:
             method = json.loads(body).get("method")
