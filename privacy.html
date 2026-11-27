@@ -26,7 +26,7 @@
     <ul>
       <li>We collect your email, name, password (scrambled), public wallet address and payment records. That's about it.</li>
       <li>We never ask for, see or store your seed phrase or private keys. Trades and payments are approved in your own wallet.</li>
-      <li>Luna's AI runs on your own device. Your questions to her aren't sent to us.</li>
+      <li>Luna's answers come from Claude, an AI by Anthropic. Your questions to her go through our server to Anthropic to be answered. We don't store them.</li>
       <li>We don't sell your data and we don't use advertising trackers.</li>
       <li>You can delete your account yourself, anytime, from the account menu.</li>
     </ul>
@@ -57,7 +57,8 @@
   <p>Any API keys you add for X (Twitter) search or PumpPortal, your sound setting and Luna's downloaded AI model stay in your browser only and are never sent to our database. If you use X search, your key passes through our server to X for that request only and is not stored or logged.</p>
 
   <h3>Luna, the AI</h3>
-  <p>Luna's AI model is downloaded to your device and runs there. What you ask her stays on your device. To answer some questions she may look up public data, such as coin prices, the weather or a Wikipedia article, straight from the services listed below.</p>
+  <p>Luna's answers come from Claude, an AI model made by Anthropic. When you ask her something, your question, your recent conversation with her and the data she looks up to answer it (for example your public wallet balances, your recent on-chain trades or a coin's market data) are sent from our server to Anthropic, which returns the answer. We don't store your questions or her answers. We do count how many questions each account asks each day and what they cost to answer, to keep usage fair, and delete those counts after 120 days.</p>
+  <p>If that service isn't available, Luna answers with a smaller AI model that is downloaded to your device and runs there, and those questions stay on your device. Your conversation with Luna is kept only in the open page and is gone when you close or reload it. To answer some questions she may also look up public data, such as coin prices, the weather or a Wikipedia article, straight from the services listed below.</p>
 
   <h2>How we use it</h2>
   <ul>
@@ -82,6 +83,7 @@
     <tr><td>DexScreener, PumpPortal, CoinGecko</td><td>Live market and launch data, the SOL price</td><td>Requests for public coin data. PumpPortal also builds the unsigned trade you then approve in your wallet.</td></tr>
     <tr><td>jsDelivr, esm.sh, unpkg</td><td>Delivering code libraries and Luna's AI model to your browser</td><td>Your IP address and browser details when files load</td></tr>
     <tr><td>Your email provider for Lunex (SMTP)</td><td>Sending the weekly recap</td><td>Your email address and the recap's contents</td></tr>
+    <tr><td>Anthropic (Claude)</td><td>Writing Luna's answers</td><td>Your questions to Luna, your recent conversation with her, and the wallet, trade and coin data she looks up to answer them</td></tr>
     <tr><td>Open-Meteo, Wikipedia</td><td>Answers Luna looks up for you</td><td>Only the search, such as a city name or topic</td></tr>
     <tr><td>X (Twitter) or twitterapi.io</td><td>The optional X feed, using your own key</td><td>Your searches and your key</td></tr>
   </table>
@@ -91,6 +93,7 @@
   <ul>
     <li><strong>Account data</strong>, synced watchlists and practice, and your community posts: until you delete them or your account. Deleting your account deletes your posts too.</li>
     <li><strong>Sign-in sessions:</strong> up to 30 days, or until you sign out.</li>
+    <li><strong>Luna usage counts</strong> (how many questions you asked each day and what they cost): 120 days, or until you delete your account.</li>
     <li><strong>Payment records</strong> (amount, date, method, transaction or invoice ID): kept after an account is deleted, without your email or name, for as long as tax and accounting law requires.</li>
     <li><strong>Blockchain transactions</strong> are public and permanent. Nobody, including us, can delete them.</li>
   </ul>

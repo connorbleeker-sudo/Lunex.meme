@@ -1,1 +1,3 @@
-# Lunex uses only Python's standard library. This file tells the host it's a Python app.
+# Lunex is mostly Python's standard library. The one package below is Anthropic's official SDK, used by ai.py for
+# Luna's cloud brain. If it ever fails to install, the server still runs and Luna uses her on-device brain.
+anthropic>=2.14,<3

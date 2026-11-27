@@ -41,6 +41,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import ai
 import live
 import payments
 import recap
@@ -147,6 +148,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS chat_reports (msg_id INTEGER NOT NULL, user_id INTEGER NOT NULL, PRIMARY KEY (msg_id, user_id));""")
         live.migrate(con)
         recap.migrate(con)
+        ai.migrate(con)
 
 
 def hash_password(pw):
@@ -176,7 +178,8 @@ def public_user(u):
     lifetime = u["email"].lower() in {e.strip().lower() for e in os.environ.get("LUNEX_PRO_EMAILS", "").split(",") if e.strip()} or u["plan"] == "pro"
     return {"email": u["email"], "name": u["name"] or u["email"].split("@")[0], "wallet": u["wallet"] or "",
             "plan": plan_of(u), "google": bool(u["google_sub"]),
-            "proUntil": 0 if lifetime else (u["pro_until"] or 0), "lifetime": lifetime, "card": bool(u["stripe_customer"])}
+            "proUntil": 0 if lifetime else (u["pro_until"] or 0), "lifetime": lifetime, "card": bool(u["stripe_customer"]),
+            "lunaCloud": ai.enabled()}
 
 
 # simple per-IP throttle for sign-in attempts
@@ -548,6 +551,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.api_password(user)
         if path == "/api/sync":
             return self.api_sync(user)
+        if path == "/api/luna/chat":                  # Luna's cloud brain (ai.py): Pro only, every limit checked there
+            if plan_of(user) != "pro":
+                self.send_json({"error": "Luna is part of Lunex Pro."}, 403)
+                return
+            body = self.read_json(limit=60000)
+            if body is None:
+                self.send_json({"error": "That message is too long."}, 413)
+                return
+            code, payload = ai.handle(user, body, db, _db_lock)
+            self.send_json(payload, code)
+            return
         if path == "/api/chat":
             return self.chat_post(user)
         if path == "/api/chat/report":
@@ -827,6 +841,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             con.execute("DELETE FROM user_data WHERE user_id=?", (user["id"],))
             con.execute("DELETE FROM chat_reports WHERE user_id=?", (user["id"],))
             con.execute("DELETE FROM chat WHERE user_id=?", (user["id"],))
+            # Luna usage: unlink it from the account but keep today's cost in the site-wide total, so the daily budget stays right
+            con.execute("UPDATE ai_usage SET user_id = -user_id WHERE user_id=?", (user["id"],))
             con.execute("DELETE FROM users WHERE id=?", (user["id"],))
         self.send_json({"ok": True}, cookie=f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
 
